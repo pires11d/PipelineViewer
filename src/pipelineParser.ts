@@ -85,6 +85,7 @@ export class PipelineParser {
   private repoMappings: Map<string, string> = new Map();
   private visited: Set<string> = new Set();
   private fileCache: Map<string, any> = new Map();
+  private originalDeps: Map<string, string> = new Map();
   private idCounter = 0;
 
   constructor(workspaceFolders: string[], manualMappings: Record<string, string>, maxDepth: number) {
@@ -98,6 +99,7 @@ export class PipelineParser {
   }
 
   parse(filePath: string): PipelineModel {
+    this.originalDeps.clear();
     const raw = fs.readFileSync(filePath, 'utf-8');
     const content = this.deduplicateConditionalKeys(raw);
     const doc = yaml.load(content) as any;
@@ -168,11 +170,17 @@ export class PipelineParser {
       }];
     }
 
-    // Fix implicit sequential dependencies
+    // Build effective parameter values (template defaults + caller overrides)
+    const effective = this.buildEffectiveParams(model);
+
+    // Resolve ${{ parameters.X }} refs in stage names and dependsOn
+    this.resolveParameterRefs(model.stages, effective);
+
+    // Fix implicit sequential dependencies (after param resolution)
     this.fixDependencies(model.stages);
 
     // Evaluate conditional expressions against effective parameter values
-    this.evaluateConditions(model);
+    this.evaluateConditions(model, effective);
 
     return model;
   }
@@ -676,20 +684,57 @@ export class PipelineParser {
   }
 
   private fixDependencies(stages: StageNode[]): void {
-    // ADO default: stages without explicit dependsOn run sequentially,
-    // depending on the previous stage. Conditional stages (wrappers) are
-    // treated as parallel branches from the same predecessor.
+    // ADO default: stages without explicit dependsOn run sequentially.
+    // Stages whose dependsOn only contains unresolved ${{ }} refs are
+    // grouped: consecutive stages sharing the same unresolved expression
+    // all depend on the same predecessor (like ADO parallel branches).
     for (let i = 1; i < stages.length; i++) {
       const stage = stages[i];
-      if (stage.dependsOn.length === 0 && !stage.isConditional) {
-        stage.dependsOn = [stages[i - 1].name];
+      if (stage.isConditional) { continue; }
+
+      const hasRealDeps = stage.dependsOn.length > 0 &&
+        stage.dependsOn.some(d => !/\$\{\{/.test(d));
+      if (hasRealDeps) { continue; }
+
+      // Unresolved or empty deps: find what this stage should depend on.
+      // If the previous stage had the same unresolved dep expression,
+      // use that stage's resolved dependency (parallel siblings).
+      const unresolvedExpr = stage.dependsOn.length > 0 ? stage.dependsOn[0] : '';
+      let resolved = false;
+      if (unresolvedExpr) {
+        // Look backward for a sibling with the same unresolved expression
+        for (let j = i - 1; j >= 0; j--) {
+          if (stages[j].isConditional) { continue; }
+          // Check if this earlier stage had the same unresolved dep
+          // (it will have been replaced by now, but we can check if it
+          //  also points to the same predecessor)
+          const jHadSameExpr = this.originalDeps.get(stages[j].name) === unresolvedExpr;
+          if (jHadSameExpr && stages[j].dependsOn.length > 0) {
+            stage.dependsOn = [...stages[j].dependsOn];
+            resolved = true;
+            break;
+          }
+          break; // Only check the immediate previous non-conditional
+        }
+      }
+      if (!resolved) {
+        // Default: depend on the nearest previous non-conditional stage
+        for (let j = i - 1; j >= 0; j--) {
+          if (!stages[j].isConditional) {
+            stage.dependsOn = [stages[j].name];
+            break;
+          }
+        }
+      }
+      // Track original expression for sibling matching
+      if (unresolvedExpr) {
+        this.originalDeps.set(stage.name, unresolvedExpr);
       }
     }
   }
 
-  // Evaluate ${{ if eq(parameters.X, Y) }} conditions against effective params
-  private evaluateConditions(model: PipelineModel): void {
-    // Build effective param values: template defaults + caller overrides
+  // Build effective parameter values: template defaults + caller overrides
+  private buildEffectiveParams(model: PipelineModel): Record<string, any> {
     const effective: Record<string, any> = {};
     for (const p of model.parameters) {
       if (p.default !== '' && p.default !== undefined) {
@@ -699,7 +744,36 @@ export class PipelineParser {
     for (const [k, v] of Object.entries(model.callerParams)) {
       effective[k] = v;
     }
+    return effective;
+  }
 
+  // Replace ${{ parameters.X }} in stage names and dependsOn with resolved values
+  private resolveParameterRefs(stages: StageNode[], params: Record<string, any>): void {
+    if (Object.keys(params).length === 0) { return; }
+    const nameMap = new Map<string, string>(); // old name -> new name
+
+    for (const stage of stages) {
+      const oldName = stage.name;
+      stage.name = this.substituteParams(stage.name, params);
+      stage.displayName = this.substituteParams(stage.displayName, params);
+      if (stage.name !== oldName) { nameMap.set(oldName, stage.name); }
+      stage.dependsOn = stage.dependsOn.map(d => this.substituteParams(d, params));
+    }
+    // Update dependsOn refs that pointed to old names
+    for (const stage of stages) {
+      stage.dependsOn = stage.dependsOn.map(d => nameMap.get(d) || d);
+    }
+  }
+
+  private substituteParams(text: string, params: Record<string, any>): string {
+    return text.replace(/\$\{\{\s*parameters\.(\w+)\s*\}\}/g, (_match, key) => {
+      if (key in params) { return String(params[key]); }
+      return _match;
+    });
+  }
+
+  // Evaluate ${{ if eq(parameters.X, Y) }} conditions against effective params
+  private evaluateConditions(model: PipelineModel, effective: Record<string, any>): void {
     if (Object.keys(effective).length === 0) { return; }
 
     for (const stage of model.stages) {

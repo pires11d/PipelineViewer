@@ -360,8 +360,9 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     Object.keys(MODEL.callerParams).forEach(function(k, i) {
       if (i > 0) paramsHtml += ' | ';
       var v = MODEL.callerParams[k];
+      var display = (typeof v === 'object') ? JSON.stringify(v) : String(v);
       var cls = (v === true) ? 'color:#81c784' : (v === false) ? 'color:#f48771' : '';
-      paramsHtml += '<span>' + esc(k) + '=<span style="' + cls + '">' + esc(String(v)) + '</span></span>';
+      paramsHtml += '<span>' + esc(k) + '=<span style="' + cls + '">' + esc(display) + '</span></span>';
     });
     paramsHtml += '</div>';
     header.innerHTML += paramsHtml;

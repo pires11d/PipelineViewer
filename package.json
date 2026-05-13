@@ -1,0 +1,65 @@
+{
+  "name": "ado-pipeline-viewer",
+  "displayName": "ADO Pipeline Viewer",
+  "description": "Visualize Azure DevOps YAML pipelines as flowcharts with full template resolution",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Visualization"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "adoPipelineViewer.visualize",
+        "title": "Visualize ADO Pipeline",
+        "icon": "$(type-hierarchy)"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .yml || resourceExtname == .yaml",
+          "command": "adoPipelineViewer.visualize",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "resourceExtname == .yml || resourceExtname == .yaml",
+          "command": "adoPipelineViewer.visualize",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ADO Pipeline Viewer",
+      "properties": {
+        "adoPipelineViewer.templateRepositoryMappings": {
+          "type": "object",
+          "default": {},
+          "description": "Manual mapping of repository aliases to local folder paths. Example: { \"templates\": \"C:/Git/MyTemplates\" }. If empty, auto-detection is used."
+        },
+        "adoPipelineViewer.maxTemplateDepth": {
+          "type": "number",
+          "default": 10,
+          "description": "Maximum depth for recursive template resolution."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "npx vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

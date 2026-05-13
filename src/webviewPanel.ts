@@ -205,6 +205,7 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .type-deploy   { border-left-color: #81c784; }
 .type-validate { border-left-color: #ffb74d; }
 .type-detect   { border-left-color: #4dd0e1; }
+.type-sync     { border-left-color: #b388ff; }
 .type-template { border-left-color: #9e9e9e; }
 .type-generic  { border-left-color: #ce93d8; }
 
@@ -212,6 +213,7 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .badge-deploy   { background: #81c78420; color: #81c784; }
 .badge-validate { background: #ffb74d20; color: #ffb74d; }
 .badge-detect   { background: #4dd0e120; color: #4dd0e1; }
+.badge-sync     { background: #b388ff20; color: #b388ff; }
 .badge-template { background: #9e9e9e20; color: #9e9e9e; }
 .badge-generic  { background: #ce93d820; color: #ce93d8; }
 
@@ -299,11 +301,15 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .step-flow-card.sf-template .sf-nav { font-size: 9px; color: #4fc3f7; opacity: 0.8; }
 .step-flow-card.sf-task { border-left-color: #4fc3f7; }
 .step-flow-card.sf-script, .step-flow-card.sf-powershell, .step-flow-card.sf-bash { border-left-color: #ffb74d; }
+.step-flow-card.sf-cmd { border-left-color: #90a4ae; }
+.step-flow-card.sf-sonarqube { border-left-color: #4caf93; }
 .step-flow-card.sf-checkout { border-left-color: #81c784; }
 
 .step-flow-dot.dot-template { border-color: #ce93d8; background: #ce93d8; }
 .step-flow-dot.dot-task { border-color: #4fc3f7; }
 .step-flow-dot.dot-script, .step-flow-dot.dot-powershell, .step-flow-dot.dot-bash { border-color: #ffb74d; }
+.step-flow-dot.dot-cmd { border-color: #90a4ae; }
+.step-flow-dot.dot-sonarqube { border-color: #4caf93; }
 .step-flow-dot.dot-checkout { border-color: #81c784; }
 
 .child-flow { margin-left: 22px; border-left: 1px dashed #444; padding-left: 3px; }

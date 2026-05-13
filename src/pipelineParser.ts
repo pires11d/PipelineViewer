@@ -49,7 +49,7 @@ export interface StageNode {
   templateResolved: boolean;
   resolvedPath: string;
   jobs: JobNode[];
-  type: 'build' | 'deploy' | 'validate' | 'detect' | 'template' | 'generic';
+  type: 'build' | 'deploy' | 'validate' | 'detect' | 'sync' | 'template' | 'generic';
   skipped: boolean;
 }
 
@@ -69,7 +69,7 @@ export interface StepNode {
   id: string;
   name: string;
   displayName: string;
-  type: 'task' | 'script' | 'powershell' | 'bash' | 'checkout' | 'template';
+  type: 'task' | 'script' | 'powershell' | 'bash' | 'cmd' | 'checkout' | 'template' | 'sonarqube';
   templateRef: string;
   templateResolved: boolean;
   resolvedPath: string;
@@ -503,11 +503,15 @@ export class PipelineParser {
   private buildStep(item: any): StepNode {
     if (item.task) {
       const taskStr = this.str(item.task);
+      const taskLower = taskStr.toLowerCase();
+      let stepType: StepNode['type'] = 'task';
+      if (taskLower.startsWith('cmdline')) { stepType = 'cmd'; }
+      else if (taskLower.startsWith('sonarqube')) { stepType = 'sonarqube'; }
       return {
         id: this.nextId('step'),
         name: taskStr,
         displayName: this.str(item.displayName) || taskStr,
-        type: 'task',
+        type: stepType,
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
       };
     }
@@ -715,25 +719,59 @@ export class PipelineParser {
     return val;
   }
 
-  // Try to evaluate simple eq(parameters.X, Y) / ne(parameters.X, Y) conditions
+  // Evaluate condition expressions against effective parameter values.
+  // Handles: eq/ne(parameters.X, Y), and(...), or(...)
   private tryEvalCondition(expr: string, params: Record<string, any>): boolean | null {
+    // Handle and(...) wrapper
+    const andMatch = expr.match(/^if\s+and\((.+)\)$/s);
+    if (andMatch) {
+      const parts = this.splitTopLevelArgs(andMatch[1]);
+      const results = parts.map(p => this.tryEvalCondition('if ' + p.trim(), params));
+      if (results.some(r => r === null)) { return null; }
+      return results.every(r => r === true);
+    }
+
+    // Handle or(...) wrapper
+    const orMatch = expr.match(/^if\s+or\((.+)\)$/s);
+    if (orMatch) {
+      const parts = this.splitTopLevelArgs(orMatch[1]);
+      const results = parts.map(p => this.tryEvalCondition('if ' + p.trim(), params));
+      if (results.some(r => r === null)) { return null; }
+      return results.some(r => r === true);
+    }
+
     // Match: if eq(parameters.X, Y) or if ne(parameters.X, Y)
     const m = expr.match(/^if\s+(eq|ne)\s*\(\s*parameters\.(\w+)\s*,\s*(.+?)\s*\)$/);
-    if (!m) { return null; } // Cannot evaluate complex expressions
+    if (!m) { return null; }
     const [, op, paramName, rawVal] = m;
     if (!(paramName in params)) { return null; }
 
     const actual = params[paramName];
     let expected: any = rawVal;
-    // Parse the expected value
     if (expected === 'true') { expected = true; }
     else if (expected === 'false') { expected = false; }
     else if (/^'.*'$/.test(expected)) { expected = expected.slice(1, -1); }
     else if (/^".*"$/.test(expected)) { expected = expected.slice(1, -1); }
 
-    // Compare with type coercion for booleans
     const isEqual = String(actual) === String(expected);
     return op === 'eq' ? isEqual : !isEqual;
+  }
+
+  // Split args at top-level commas (respecting nested parentheses)
+  private splitTopLevelArgs(text: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '(') { depth++; }
+      else if (text[i] === ')') { depth--; }
+      else if (text[i] === ',' && depth === 0) {
+        parts.push(text.substring(start, i));
+        start = i + 1;
+      }
+    }
+    parts.push(text.substring(start));
+    return parts;
   }
 
   private emptyStage(name: string): StageNode {
@@ -771,8 +809,9 @@ export class PipelineParser {
     const combined = `${name} ${displayName}`.toLowerCase();
     if (combined.includes('deploy')) { return 'deploy'; }
     if (combined.includes('build') || combined.includes('sign') || combined.includes('restore')) { return 'build'; }
-    if (combined.includes('validat') || combined.includes('drift') || combined.includes('alert')) { return 'validate'; }
+    if (combined.includes('validat') || combined.includes('alert')) { return 'validate'; }
     if (combined.includes('detect') || combined.includes('determine') || combined.includes('extract')) { return 'detect'; }
+    if (combined.includes('synchroniz') || combined.includes('backfill') || combined.includes('drift') || combined.includes('sync')) { return 'sync'; }
     return 'generic';
   }
 

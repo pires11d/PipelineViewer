@@ -4,3 +4,6 @@ node_modules/**
 tsconfig.json
 esbuild.js
 *.map
+test-*.js
+out/parser-test*.js
+TODO.txt

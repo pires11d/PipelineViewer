@@ -133,6 +133,7 @@ header {
   flex-shrink: 0;
 }
 header h1 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+header .pipeline-name { font-size: 12px; font-weight: 600; opacity: 0.6; margin-bottom: 4px; }
 header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wrap: wrap; }
 header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .label { color: var(--vscode-descriptionForeground, #888); }
@@ -314,6 +315,10 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 
 .child-flow { margin-left: 22px; border-left: 1px dashed #444; padding-left: 3px; }
 
+.direct-steps { max-width: 500px; }
+.direct-jobs { max-width: 500px; }
+.direct-jobs .job-card { margin-bottom: 12px; }
+
 /* ===== SVG Connectors ===== */
 svg.connectors {
   position: absolute; top: 0; left: 0;
@@ -344,14 +349,31 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Header --
   var header = document.getElementById('header');
-  header.innerHTML = '<h1>' + esc(MODEL.name) + '</h1>'
-    + '<div class="meta">'
-    + '<span><span class="label">Source:</span> ' + esc(MODEL.fileName) + '</span>'
-    + '<span><span class="label">Trigger:</span> ' + esc(MODEL.trigger) + '</span>'
-    + '<span><span class="label">PR:</span> ' + esc(MODEL.pr) + '</span>'
-    + '<span><span class="label">Pool:</span> ' + esc(MODEL.pool) + '</span>'
-    + '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>'
-    + '</div>';
+  var isTemplate = (MODEL.templateType === 'steps' || MODEL.templateType === 'jobs');
+  var hasName = MODEL.name && MODEL.name !== 'Unnamed Pipeline';
+  var metaItems = '';
+  if (!isTemplate) {
+    metaItems = '<span><span class="label">Trigger:</span> ' + esc(MODEL.trigger) + '</span>'
+      + '<span><span class="label">PR:</span> ' + esc(MODEL.pr) + '</span>'
+      + '<span><span class="label">Pool:</span> ' + esc(MODEL.pool) + '</span>'
+      + '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>';
+  } else {
+    var totalSteps = 0;
+    var totalJobs = 0;
+    stages.forEach(function(s) {
+      totalJobs += s.jobs.length;
+      s.jobs.forEach(function(j) { totalSteps += j.steps.length; });
+    });
+    if (MODEL.templateType === 'jobs') {
+      metaItems = '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
+        + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
+    } else {
+      metaItems = '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
+    }
+  }
+  header.innerHTML = '<h1>' + esc(MODEL.fileName) + '</h1>'
+    + (hasName ? '<div class="pipeline-name">' + esc(MODEL.name) + '</div>' : '')
+    + '<div class="meta">' + metaItems + '</div>';
 
   // Show caller params if present
   if (MODEL.callerParams && Object.keys(MODEL.callerParams).length > 0) {
@@ -485,6 +507,24 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     return html;
   }
 
+  // -- Render based on template type --
+  if (MODEL.templateType === 'steps' && stages.length === 1 && stages[0].jobs.length === 1) {
+    // Step template: render steps directly without stage/job wrapper
+    var stepContainer = document.createElement('div');
+    stepContainer.className = 'direct-steps';
+    stepContainer.innerHTML = renderStepFlow(stages[0].jobs[0].steps);
+    canvas.appendChild(stepContainer);
+    canvas.style.padding = '20px';
+  } else if (MODEL.templateType === 'jobs' && stages.length === 1) {
+    // Job template: render jobs directly without stage wrapper
+    var jobContainer = document.createElement('div');
+    jobContainer.className = 'direct-jobs';
+    stages[0].jobs.forEach(function(job, ji) {
+      jobContainer.innerHTML += buildJobHtml(job, ji);
+    });
+    canvas.appendChild(jobContainer);
+    canvas.style.padding = '20px';
+  } else {
   // -- Render all stage nodes --
   for (var col = 0; col <= lo.maxLayer; col++) {
     var cs = lo.groups[col] || [];
@@ -504,6 +544,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       canvas.appendChild(div);
     });
   }
+  } // end else (stage rendering)
 
   // -- Wire click events (delegate on canvas) --
   canvas.addEventListener('click', function(e) {
@@ -674,6 +715,9 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   }
 
   // -- Toolbar --
+  if (isTemplate) {
+    document.getElementById('toolbar').style.display = 'none';
+  }
   document.getElementById('btnExpandAll').addEventListener('click', expandAll);
   document.getElementById('btnCollapseAll').addEventListener('click', collapseAll);
   document.getElementById('btnZoomIn').addEventListener('click', function() {

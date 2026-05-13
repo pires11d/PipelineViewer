@@ -16,6 +16,7 @@ export interface PipelineModel {
   variables: VarDef[];
   stages: StageNode[];
   callerParams: Record<string, any>;
+  templateType: 'pipeline' | 'stages' | 'jobs' | 'steps';
 }
 
 export interface ParamDef {
@@ -127,6 +128,7 @@ export class PipelineParser {
       variables: this.parseVariables(doc.variables),
       stages: [],
       callerParams: {},
+      templateType: 'pipeline',
     };
 
     const dir = path.dirname(filePath);
@@ -151,14 +153,17 @@ export class PipelineParser {
         model.stages = [this.unresolvedStage(tplRef)];
       }
     } else if (doc.stages) {
+      model.templateType = 'stages';
       model.stages = this.parseStages(doc.stages, dir, 0);
     } else if (doc.jobs) {
+      model.templateType = 'jobs';
       model.stages = [{
         ...this.emptyStage('DefaultStage'),
         displayName: 'Default Stage',
         jobs: this.parseJobs(doc.jobs, dir, 0),
       }];
     } else if (doc.steps) {
+      model.templateType = 'steps';
       model.stages = [{
         ...this.emptyStage('DefaultStage'),
         displayName: 'Default Stage',

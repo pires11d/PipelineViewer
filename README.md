@@ -1,4 +1,4 @@
-# ADO Pipeline Viewer
+# Azure DevOps Pipeline Viewer
 
 A VS Code extension that visualizes Azure DevOps YAML pipelines as interactive flowcharts with full recursive template resolution.
 
@@ -27,17 +27,14 @@ A VS Code extension that visualizes Azure DevOps YAML pipelines as interactive f
 If you don't have nvm-windows installed:
 
 ```powershell
-# Download and install nvm-windows from https://github.com/coreybutler/nvm-windows/releases
-# Then:
+choco install nvm
 nvm install 18
 nvm use 18
-node --version   # Should show v18.x.x
 ```
 
 ### 2. Clone and install dependencies
 
 ```powershell
-cd c:\Git\KMN\PipelineViewer
 npm install
 ```
 
@@ -55,12 +52,12 @@ This runs `esbuild` to bundle `src/extension.ts` into `out/extension.js`.
 npm run package
 ```
 
-This produces `ado-pipeline-viewer-0.1.0.vsix` in the project root.
+This produces `azure-pipeline-viewer-0.1.0.vsix` in the project root.
 
 ### 5. Install the VSIX
 
 ```powershell
-code --install-extension ado-pipeline-viewer-0.1.0.vsix --force
+code --install-extension azure-pipeline-viewer-0.1.0.vsix --force
 ```
 
 Then reload VS Code (`Ctrl+Shift+P` > `Developer: Reload Window`).
@@ -71,7 +68,7 @@ For rapid iteration without re-packaging:
 
 ```powershell
 npm run compile
-Copy-Item "out\extension.js" "$env:USERPROFILE\.vscode\extensions\pires11d.ado-pipeline-viewer-0.1.0\out\extension.js" -Force
+Copy-Item "out\extension.js" "$env:USERPROFILE\.vscode\extensions\pires11d.azure-pipeline-viewer-0.1.0\out\extension.js" -Force
 ```
 
 Then reload VS Code.
@@ -124,7 +121,7 @@ PipelineViewer/
 ## Troubleshooting
 
 **Two icons showing for the command:**
-You have duplicate extension folders. Check `~/.vscode/extensions/` for both `local.ado-pipeline-viewer-*` and `pires11d.ado-pipeline-viewer-*`. Remove the `local` one and reload.
+You have duplicate extension folders. Check `~/.vscode/extensions/` for both `local.azure-pipeline-viewer-*` and `pires11d.azure-pipeline-viewer-*`. Remove the `local` one and reload.
 
 **Templates not resolving:**
 Ensure the template repository is cloned locally and either:

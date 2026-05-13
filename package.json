@@ -1,6 +1,6 @@
 {
-  "name": "ado-pipeline-viewer",
-  "displayName": "Azure DevOps YML Pipeline Viewer (+ Templates!)",
+  "name": "azure-pipeline-viewer",
+  "displayName": "Azure DevOps Pipeline Viewer",
   "description": "Visualize Azure DevOps YAML pipelines as flowcharts with full template resolution",
   "version": "0.1.0",
   "publisher": "pires11d",
@@ -38,7 +38,7 @@
       ]
     },
     "configuration": {
-      "title": "ADO Pipeline Viewer",
+      "title": "Azure DevOps Pipeline Viewer",
       "properties": {
         "adoPipelineViewer.templateRepositoryMappings": {
           "type": "object",

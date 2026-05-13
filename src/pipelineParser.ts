@@ -15,6 +15,7 @@ export interface PipelineModel {
   resources: ResourceRef[];
   variables: VarDef[];
   stages: StageNode[];
+  callerParams: Record<string, any>;
 }
 
 export interface ParamDef {
@@ -49,6 +50,7 @@ export interface StageNode {
   resolvedPath: string;
   jobs: JobNode[];
   type: 'build' | 'deploy' | 'validate' | 'detect' | 'template' | 'generic';
+  skipped: boolean;
 }
 
 export interface JobNode {
@@ -122,15 +124,24 @@ export class PipelineParser {
       resources: this.parseResources(doc.resources),
       variables: this.parseVariables(doc.variables),
       stages: [],
+      callerParams: {},
     };
 
     const dir = path.dirname(filePath);
 
     if (doc.extends) {
-      // Template-based pipeline
+      // Template-based pipeline -- extract caller-supplied parameters
+      if (doc.extends.parameters && typeof doc.extends.parameters === 'object') {
+        model.callerParams = { ...doc.extends.parameters };
+      }
       const tplRef = this.str(doc.extends.template);
       const resolved = this.resolveTemplatePath(tplRef, dir);
       if (resolved && fs.existsSync(resolved)) {
+        // Load the template's own parameter definitions (with defaults)
+        const tplDoc = this.loadYamlFile(resolved);
+        if (tplDoc && Array.isArray(tplDoc.parameters)) {
+          model.parameters = this.parseParams(tplDoc.parameters);
+        }
         this.visited.add(resolved.toLowerCase());
         model.stages = this.parseFileForStages(resolved, 1);
         this.visited.delete(resolved.toLowerCase());
@@ -159,6 +170,9 @@ export class PipelineParser {
 
     // Fix implicit sequential dependencies
     this.fixDependencies(model.stages);
+
+    // Evaluate conditional expressions against effective parameter values
+    this.evaluateConditions(model);
 
     return model;
   }
@@ -658,16 +672,68 @@ export class PipelineParser {
   }
 
   private fixDependencies(stages: StageNode[]): void {
-    // If stages have no explicit dependsOn AND are not conditional,
-    // make them depend on the previous stage (sequential by default)
+    // ADO default: stages without explicit dependsOn run sequentially,
+    // depending on the previous stage. Conditional stages (wrappers) are
+    // treated as parallel branches from the same predecessor.
     for (let i = 1; i < stages.length; i++) {
       const stage = stages[i];
       if (stage.dependsOn.length === 0 && !stage.isConditional) {
-        // Check if the original YAML had dependsOn: [] (empty array = parallel)
-        // Since we can't distinguish, leave as-is -- ADO default is sequential
-        // but templates usually set dependsOn explicitly
+        stage.dependsOn = [stages[i - 1].name];
       }
     }
+  }
+
+  // Evaluate ${{ if eq(parameters.X, Y) }} conditions against effective params
+  private evaluateConditions(model: PipelineModel): void {
+    // Build effective param values: template defaults + caller overrides
+    const effective: Record<string, any> = {};
+    for (const p of model.parameters) {
+      if (p.default !== '' && p.default !== undefined) {
+        effective[p.name] = this.parseParamValue(p.default, p.type);
+      }
+    }
+    for (const [k, v] of Object.entries(model.callerParams)) {
+      effective[k] = v;
+    }
+
+    if (Object.keys(effective).length === 0) { return; }
+
+    for (const stage of model.stages) {
+      if (stage.isConditional && stage.conditionalExpr) {
+        const result = this.tryEvalCondition(stage.conditionalExpr, effective);
+        if (result === false) {
+          stage.skipped = true;
+        }
+      }
+    }
+  }
+
+  private parseParamValue(val: string, type: string): any {
+    if (type === 'boolean') {
+      return val === 'true' || val === true;
+    }
+    return val;
+  }
+
+  // Try to evaluate simple eq(parameters.X, Y) / ne(parameters.X, Y) conditions
+  private tryEvalCondition(expr: string, params: Record<string, any>): boolean | null {
+    // Match: if eq(parameters.X, Y) or if ne(parameters.X, Y)
+    const m = expr.match(/^if\s+(eq|ne)\s*\(\s*parameters\.(\w+)\s*,\s*(.+?)\s*\)$/);
+    if (!m) { return null; } // Cannot evaluate complex expressions
+    const [, op, paramName, rawVal] = m;
+    if (!(paramName in params)) { return null; }
+
+    const actual = params[paramName];
+    let expected: any = rawVal;
+    // Parse the expected value
+    if (expected === 'true') { expected = true; }
+    else if (expected === 'false') { expected = false; }
+    else if (/^'.*'$/.test(expected)) { expected = expected.slice(1, -1); }
+    else if (/^".*"$/.test(expected)) { expected = expected.slice(1, -1); }
+
+    // Compare with type coercion for booleans
+    const isEqual = String(actual) === String(expected);
+    return op === 'eq' ? isEqual : !isEqual;
   }
 
   private emptyStage(name: string): StageNode {
@@ -677,7 +743,7 @@ export class PipelineParser {
       dependsOn: [], condition: '',
       isConditional: false, conditionalExpr: '',
       templateRef: '', templateResolved: false, resolvedPath: '',
-      jobs: [], type: 'generic',
+      jobs: [], type: 'generic', skipped: false,
     };
   }
 

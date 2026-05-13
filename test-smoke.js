@@ -21,7 +21,7 @@ async function main() {
   const { PipelineParser } = require('./out/parser-test');
 
   const testFile = path.resolve(__dirname,
-    '../Pipelines/DartDBObjects/Dart.DB.VSA/nonprod-deploy.yml');
+    '../Tools/Pipelines/DartDBObjects/Dart.DB.VSA/nonprod-deploy.yml');
 
   if (!fs.existsSync(testFile)) {
     console.error('Test file not found:', testFile);
@@ -71,7 +71,7 @@ async function main() {
 
   // Test 2: create-preprod-deploy-pipeline (has duplicate conditional keys)
   const testFile2 = path.resolve(__dirname,
-    '../Pipelines/DartTemplates/Dart.PipelineTemplates/templates/pipelines/create-preprod-deploy-pipeline.yml');
+    '../Tools/Pipelines/DartTemplates/Dart.PipelineTemplates/templates/pipelines/create-preprod-deploy-pipeline.yml');
   if (fs.existsSync(testFile2)) {
     console.log('=== TEST 2: create-preprod-deploy-pipeline ===');
     const parser2 = new PipelineParser(

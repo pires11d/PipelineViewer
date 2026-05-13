@@ -34,6 +34,11 @@ export function activate(context: vscode.ExtensionContext) {
 
       PipelineViewerPanel.createOrShow(context.extensionUri, model);
     } catch (err: any) {
+      const stack = err.stack ? err.stack.split('\n').slice(0, 8).join('\n') : 'no stack';
+      const channel = vscode.window.createOutputChannel('ADO Pipeline Viewer');
+      channel.appendLine('ERROR: ' + err.message);
+      channel.appendLine(stack);
+      channel.show();
       vscode.window.showErrorMessage(`Pipeline parse error: ${err.message}`);
     }
   });

@@ -193,6 +193,13 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 
 .stage-node.conditional { border-style: dashed; }
 .stage-node.unresolved { opacity: 0.6; border-style: dotted; }
+.stage-node.skipped { opacity: 0.35; }
+.stage-node.skipped .sn-header::after {
+  content: 'SKIPPED';
+  font-size: 8px; font-weight: 700; color: #888;
+  background: #88888820; padding: 1px 5px; border-radius: 3px;
+  margin-left: 6px; vertical-align: middle;
+}
 
 .type-build    { border-left-color: #4fc3f7; }
 .type-deploy   { border-left-color: #81c784; }
@@ -340,6 +347,20 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     + '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>'
     + '</div>';
 
+  // Show caller params if present
+  if (MODEL.callerParams && Object.keys(MODEL.callerParams).length > 0) {
+    var paramsHtml = '<div class="meta" style="margin-top:4px">';
+    paramsHtml += '<span class="label">Params:</span> ';
+    Object.keys(MODEL.callerParams).forEach(function(k, i) {
+      if (i > 0) paramsHtml += ' | ';
+      var v = MODEL.callerParams[k];
+      var cls = (v === true) ? 'color:#81c784' : (v === false) ? 'color:#f48771' : '';
+      paramsHtml += '<span>' + esc(k) + '=<span style="' + cls + '">' + esc(String(v)) + '</span></span>';
+    });
+    paramsHtml += '</div>';
+    header.innerHTML += paramsHtml;
+  }
+
   // -- Layout --
   var stages = MODEL.stages;
   var stageMap = {};
@@ -351,10 +372,15 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       if (vis[name]) return layers[name] || 0;
       vis[name] = true;
       var s = stageMap[name];
-      if (!s || s.dependsOn.length === 0) { layers[name] = 0; return 0; }
+      if (!s) { layers[name] = 0; return 0; }
+      // Filter to only resolved dependencies (skip unresolved parameter refs)
+      var resolvedDeps = s.dependsOn.filter(function(d) {
+        return stageMap[d] && !/\$\{\{/.test(d);
+      });
+      if (resolvedDeps.length === 0) { layers[name] = 0; return 0; }
       var mx = 0;
-      s.dependsOn.forEach(function(dep) {
-        if (stageMap[dep]) mx = Math.max(mx, getLayer(dep) + 1);
+      resolvedDeps.forEach(function(dep) {
+        mx = Math.max(mx, getLayer(dep) + 1);
       });
       layers[name] = mx; return mx;
     }
@@ -400,7 +426,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   function buildJobHtml(job, ji) {
     var badgeCls = job.isDeployment ? 'job-badge-deploy' : 'job-badge-job';
-    var badgeText = job.isDeployment ? 'DEPLOY' : 'JOB';
+    var badgeText = 'JOB';
     var navAttr = (job.templateRef && job.resolvedPath)
       ? ' data-job-nav="' + esc(job.resolvedPath) + '"' : '';
 
@@ -463,6 +489,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       div.className = 'stage-node type-' + s.type;
       if (s.isConditional) div.classList.add('conditional');
       if (!s.templateResolved && s.templateRef) div.classList.add('unresolved');
+      if (s.skipped) div.classList.add('skipped');
       div.style.left = x + 'px';
       div.style.top = y + 'px';
       div.setAttribute('data-stage', s.name);
@@ -530,7 +557,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Relayout: measure heights, reposition, redraw connectors --
   function relayout() {
-    // Measure actual heights
+    // Update widths based on expanded state
     document.querySelectorAll('.stage-node').forEach(function(el) {
       var nm = el.getAttribute('data-stage');
       if (nm && nodePositions[nm]) {
@@ -547,15 +574,30 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
           nodePositions[nm].h = el.getBoundingClientRect().height / zoom;
         }
       });
-      // Reposition vertically within each column
+      // Compute column X positions dynamically based on widest node per column
+      var colX = [];
+      var xCursor = PAD;
+      for (var c = 0; c <= lo.maxLayer; c++) {
+        colX[c] = xCursor;
+        var maxW = NODE_W;
+        (lo.groups[c] || []).forEach(function(s) {
+          if (nodePositions[s.name]) maxW = Math.max(maxW, nodePositions[s.name].w);
+        });
+        xCursor += maxW + H_GAP;
+      }
+      // Apply horizontal and vertical positions
       for (var c = 0; c <= lo.maxLayer; c++) {
         var cStages = lo.groups[c] || [];
         var yOff = PAD;
         cStages.forEach(function(s) {
+          nodePositions[s.name].x = colX[c];
           nodePositions[s.name].y = yOff;
           yOff += nodePositions[s.name].h + V_GAP;
           var el = canvas.querySelector('[data-stage="' + CSS.escape(s.name) + '"]');
-          if (el) el.style.top = nodePositions[s.name].y + 'px';
+          if (el) {
+            el.style.left = colX[c] + 'px';
+            el.style.top = nodePositions[s.name].y + 'px';
+          }
         });
       }
       renderConnectors();
@@ -584,11 +626,9 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     stages.forEach(function(s) {
       var to = nodePositions[s.name];
       if (!to) return;
-      var deps = s.dependsOn.filter(function(d) { return !!nodePositions[d]; });
-      if (deps.length === 0 && lo.layers[s.name] > 0) {
-        var idx = stages.indexOf(s);
-        if (idx > 0) deps = [stages[idx - 1].name];
-      }
+      var deps = s.dependsOn.filter(function(d) {
+        return nodePositions[d] && !/\$\{\{/.test(d);
+      });
       deps.forEach(function(dn) {
         var from = nodePositions[dn];
         if (from) drawEdge(svg, from, to);

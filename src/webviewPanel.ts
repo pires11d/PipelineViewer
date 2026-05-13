@@ -8,7 +8,7 @@ export class PipelineViewerPanel {
   private disposables: vscode.Disposable[] = [];
 
   public static createOrShow(extensionUri: vscode.Uri, model: PipelineModel) {
-    const column = vscode.ViewColumn.Beside;
+    const column = vscode.ViewColumn.Active;
 
     if (PipelineViewerPanel.currentPanel) {
       PipelineViewerPanel.currentPanel.panel.reveal(column);
@@ -138,6 +138,20 @@ header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wra
 header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .label { color: var(--vscode-descriptionForeground, #888); }
 
+.header-params { margin-top: 6px; }
+.header-params-toggle { font-size: 11px; cursor: pointer; user-select: none; color: #90a4ae; display: inline-flex; align-items: center; gap: 4px; }
+.header-params-toggle:hover { color: #b0bec5; }
+.param-count { opacity: 0.7; }
+.header-params-grid { margin-top: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
+.header-params-grid.collapsed { display: none; }
+.header-param-item { display: flex; gap: 6px; align-items: baseline; font-size: 11px; padding: 2px 0; border-bottom: 1px solid #ffffff08; }
+.header-param-key { color: #81d4fa; font-family: monospace; white-space: nowrap; font-weight: 500; }
+.header-param-key::after { content: ":"; }
+.header-param-val { font-family: monospace; word-break: break-all; }
+.header-param-val.param-true { color: #81c784; }
+.header-param-val.param-false { color: #f48771; }
+.header-param-val.param-str { color: #c5e1a5; }
+
 #toolbar {
   padding: 6px 20px;
   background: var(--vscode-sideBar-background, #252526);
@@ -206,17 +220,23 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .type-deploy   { border-left-color: #81c784; }
 .type-validate { border-left-color: #ffb74d; }
 .type-detect   { border-left-color: #4dd0e1; }
-.type-sync     { border-left-color: #b388ff; }
+.type-sync     { border-left-color: #a177e9; }
 .type-template { border-left-color: #9e9e9e; }
-.type-generic  { border-left-color: #ce93d8; }
+.type-generic  { border-left-color: #c0866c; }
+.type-test     { border-left-color: #f06292; }
+.type-nuget    { border-left-color: #ffca28; }
+.type-database { border-left-color: #4db6ac; }
 
 .badge-build    { background: #4fc3f720; color: #4fc3f7; }
 .badge-deploy   { background: #81c78420; color: #81c784; }
 .badge-validate { background: #ffb74d20; color: #ffb74d; }
 .badge-detect   { background: #4dd0e120; color: #4dd0e1; }
-.badge-sync     { background: #b388ff20; color: #b388ff; }
+.badge-sync     { background: #b388ff20; color: #a177e9; }
 .badge-template { background: #9e9e9e20; color: #9e9e9e; }
-.badge-generic  { background: #ce93d820; color: #ce93d8; }
+.badge-generic  { background: #d8af9320; color: #c0866c; }
+.badge-test     { background: #f0629220; color: #f06292; }
+.badge-nuget    { background: #ffca2820; color: #ffca28; }
+.badge-database { background: #4db6ac20; color: #4db6ac; }
 
 .cond-label {
   font-size: 10px; color: #ffb74d;
@@ -313,6 +333,32 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .step-flow-dot.dot-sonarqube { border-color: #4caf93; }
 .step-flow-dot.dot-checkout { border-color: #81c784; }
 
+.sf-task-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #4fc3f720; color: #4fc3f7; display: inline-block; margin-top: 1px; font-family: monospace; }
+.sf-task-badge.tb-vsbuild { background: #2196f320; color: #64b5f6; }
+.sf-task-badge.tb-nuget { background: #ffb74d20; color: #ffb74d; }
+.sf-task-badge.tb-dotnet { background: #7c4dff20; color: #b388ff; }
+.sf-task-badge.tb-powershell { background: #7e57c220; color: #b39ddb; }
+.sf-task-badge.tb-publish { background: #66bb6a20; color: #81c784; }
+.sf-task-badge.tb-download { background: #26a69a20; color: #80cbc4; }
+.sf-task-badge.tb-copy { background: #78909c20; color: #b0bec5; }
+.sf-task-badge.tb-sonarqube { background: #4caf9320; color: #4caf93; }
+.sf-task-badge.tb-cmd { background: #90a4ae20; color: #90a4ae; }
+.sf-condition { font-size: 9px; color: #ffa726; margin-top: 2px; word-break: break-all; }
+.sf-condition::before { content: "IF "; font-weight: 700; }
+.sf-continue { font-size: 9px; color: #ef5350; margin-top: 1px; }
+.sf-inputs { margin-top: 3px; font-size: 9px; }
+.sf-inputs-toggle { cursor: pointer; color: #90a4ae; user-select: none; }
+.sf-inputs-toggle:hover { color: #b0bec5; }
+.sf-inputs-list { margin-top: 2px; padding-left: 6px; border-left: 1px solid #444; display: none; }
+.sf-inputs-list.expanded { display: block; }
+.sf-input-row { display: flex; gap: 4px; padding: 1px 0; line-height: 1.3; }
+.sf-input-key { color: #81d4fa; font-family: monospace; white-space: nowrap; }
+.sf-input-val { color: #c5e1a5; font-family: monospace; word-break: break-all; }
+.sf-input-val.truncated { cursor: pointer; }
+.sf-input-val.truncated:hover { text-decoration: underline; text-decoration-style: dotted; }
+.sf-script-full { display: none; white-space: pre-wrap; font-family: monospace; font-size: 9px; color: #c5e1a5; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 4px 6px; margin-top: 2px; max-height: 200px; overflow-y: auto; }
+.sf-script-full.expanded { display: block; }
+
 .child-flow { margin-left: 22px; border-left: 1px dashed #444; padding-left: 3px; }
 
 .direct-steps { max-width: 500px; }
@@ -360,9 +406,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   } else {
     var totalSteps = 0;
     var totalJobs = 0;
-    stages.forEach(function(s) {
+    MODEL.stages.forEach(function(s) {
+      if (!s.jobs) return;
       totalJobs += s.jobs.length;
-      s.jobs.forEach(function(j) { totalSteps += j.steps.length; });
+      s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
     });
     if (MODEL.templateType === 'jobs') {
       metaItems = '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
@@ -377,16 +424,22 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // Show caller params if present
   if (MODEL.callerParams && Object.keys(MODEL.callerParams).length > 0) {
-    var paramsHtml = '<div class="meta" style="margin-top:4px">';
-    paramsHtml += '<span class="label">Params:</span> ';
-    Object.keys(MODEL.callerParams).forEach(function(k, i) {
-      if (i > 0) paramsHtml += ' | ';
+    var paramKeys = Object.keys(MODEL.callerParams);
+    var paramsHtml = '<div class="header-params">';
+    paramsHtml += '<div class="header-params-toggle" data-toggle-header-params="1">';
+    paramsHtml += '<span class="label">Params</span> <span class="param-count">(' + paramKeys.length + ')</span> &#9662;</div>';
+    paramsHtml += '<div class="header-params-grid">';
+    paramKeys.forEach(function(k) {
       var v = MODEL.callerParams[k];
       var display = (typeof v === 'object') ? JSON.stringify(v) : String(v);
-      var cls = (v === true) ? 'color:#81c784' : (v === false) ? 'color:#f48771' : '';
-      paramsHtml += '<span>' + esc(k) + '=<span style="' + cls + '">' + esc(display) + '</span></span>';
+      if (display.length > 60) display = display.substring(0, 57) + '...';
+      var cls = (v === true) ? 'param-true' : (v === false) ? 'param-false' : 'param-str';
+      paramsHtml += '<div class="header-param-item">';
+      paramsHtml += '<span class="header-param-key">' + esc(k) + '</span>';
+      paramsHtml += '<span class="header-param-val ' + cls + '">' + esc(display) + '</span>';
+      paramsHtml += '</div>';
     });
-    paramsHtml += '</div>';
+    paramsHtml += '</div></div>';
     header.innerHTML += paramsHtml;
   }
 
@@ -402,8 +455,8 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       vis[name] = true;
       var s = stageMap[name];
       if (!s) { layers[name] = 0; return 0; }
-      // Filter to only resolved dependencies (skip unresolved parameter refs)
-      var resolvedDeps = s.dependsOn.filter(function(d) {
+      // Filter to only resolved dependencies (skip unresolved parameter refs and missing stages)
+      var resolvedDeps = (s.dependsOn || []).filter(function(d) {
         return stageMap[d] && !/\$\{\{/.test(d);
       });
       if (resolvedDeps.length === 0) { layers[name] = 0; return 0; }
@@ -414,6 +467,24 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       layers[name] = mx; return mx;
     }
     stages.forEach(function(s) { getLayer(s.name); });
+
+    // Second pass: stages with ALL unresolved deps that got layer 0
+    // should be placed after the nearest preceding stage in document order
+    stages.forEach(function(s, idx) {
+      if (idx === 0) return;
+      var hasDeps = s.dependsOn && s.dependsOn.length > 0;
+      var resolvedDeps = hasDeps ? s.dependsOn.filter(function(d) {
+        return stageMap[d] && !/\$\{\{/.test(d);
+      }) : [];
+      // If stage has deps but none resolved, place it after the highest-layer predecessor
+      if (hasDeps && resolvedDeps.length === 0 && (layers[s.name] || 0) === 0) {
+        var bestLayer = 0;
+        for (var j = idx - 1; j >= 0; j--) {
+          bestLayer = Math.max(bestLayer, (layers[stages[j].name] || 0));
+        }
+        layers[s.name] = bestLayer + 1;
+      }
+    });
     var groups = {}, maxLayer = 0;
     stages.forEach(function(s) {
       var layer = layers[s.name] || 0;
@@ -437,16 +508,32 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       h += '<div class="cond-label">if: ' + esc(s.conditionalExpr) + '</div>';
     if (s.templateRef)
       h += '<div class="tpl-label">tpl: ' + esc(s.templateRef) + '</div>';
-    h += '<div class="sn-footer">' + s.jobs.length + ' job(s), '
-      + s.jobs.reduce(function(sum, j) { return sum + j.steps.length; }, 0)
+    // Stage parameters
+    var stageParamKeys = s.parameters ? Object.keys(s.parameters) : [];
+    if (stageParamKeys.length > 0) {
+      h += '<div class="sf-inputs stage-params">';
+      h += '<span class="sf-inputs-toggle" data-toggle-inputs="1">';
+      h += 'params (' + stageParamKeys.length + ') &#9662;</span>';
+      h += '<div class="sf-inputs-list">';
+      stageParamKeys.forEach(function(k) {
+        var val = s.parameters[k] || '';
+        if (val.length > 80) val = val.substring(0, 77) + '...';
+        h += '<div class="sf-input-row"><span class="sf-input-key">' + esc(k) + ':</span>';
+        h += '<span class="sf-input-val">' + esc(val) + '</span></div>';
+      });
+      h += '</div></div>';
+    }
+    var stageJobs = s.jobs || [];
+    h += '<div class="sn-footer">' + stageJobs.length + ' job(s), '
+      + stageJobs.reduce(function(sum, j) { return sum + (j.steps ? j.steps.length : 0); }, 0)
       + ' step(s)</div>';
 
     // Inner content (visible when expanded)
     h += '<div class="stage-inner">';
-    if (s.jobs.length === 0) {
+    if (!s.jobs || s.jobs.length === 0) {
       h += '<div style="opacity:0.4;padding:10px;text-align:center;font-size:11px">No jobs resolved</div>';
     }
-    s.jobs.forEach(function(job, ji) {
+    (s.jobs || []).forEach(function(job, ji) {
       h += buildJobHtml(job, ji);
     });
     h += '</div>';
@@ -476,10 +563,40 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       h += '</div>';
     }
 
+    // Job parameters
+    var jobParamKeys = job.parameters ? Object.keys(job.parameters) : [];
+    if (jobParamKeys.length > 0) {
+      h += '<div class="sf-inputs job-params">';
+      h += '<span class="sf-inputs-toggle" data-toggle-inputs="1">';
+      h += 'params (' + jobParamKeys.length + ') &#9662;</span>';
+      h += '<div class="sf-inputs-list">';
+      jobParamKeys.forEach(function(k) {
+        var val = job.parameters[k] || '';
+        if (val.length > 80) val = val.substring(0, 77) + '...';
+        h += '<div class="sf-input-row"><span class="sf-input-key">' + esc(k) + ':</span>';
+        h += '<span class="sf-input-val">' + esc(val) + '</span></div>';
+      });
+      h += '</div></div>';
+    }
+
     h += '<div class="job-steps">';
     h += renderStepFlow(job.steps);
     h += '</div></div>';
     return h;
+  }
+
+  function getTaskBadgeClass(name) {
+    var lower = (name || '').toLowerCase();
+    if (lower.indexOf('vsbuild') >= 0) return 'tb-vsbuild';
+    if (lower.indexOf('nuget') >= 0) return 'tb-nuget';
+    if (lower.indexOf('dotnetcore') >= 0 || lower.indexOf('usedotnet') >= 0) return 'tb-dotnet';
+    if (lower.indexOf('powershell') >= 0) return 'tb-powershell';
+    if (lower.indexOf('publish') >= 0) return 'tb-publish';
+    if (lower.indexOf('download') >= 0) return 'tb-download';
+    if (lower.indexOf('copy') >= 0) return 'tb-copy';
+    if (lower.indexOf('sonar') >= 0) return 'tb-sonarqube';
+    if (lower.indexOf('cmdline') >= 0 || lower.indexOf('cmd') >= 0) return 'tb-cmd';
+    return '';
   }
 
   function renderStepFlow(steps) {
@@ -496,8 +613,43 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       html += '</div>';
       html += '<div class="step-flow-card sf-' + step.type + '"' + navAttr + '>';
       html += '<div class="sf-name">' + esc(step.displayName) + '</div>';
-      html += '<div class="sf-type">' + esc(step.type) + '</div>';
+      // Task badge with version (e.g. VSBuild@1)
+      if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
+        var bc = getTaskBadgeClass(step.name);
+        html += '<span class="sf-task-badge ' + bc + '">' + esc(step.name) + '</span>';
+      } else {
+        html += '<div class="sf-type">' + esc(step.type) + '</div>';
+      }
       if (step.templateRef) html += '<div class="sf-tpl">' + esc(step.templateRef) + '</div>';
+      // Condition
+      if (step.condition) {
+        html += '<div class="sf-condition">' + esc(step.condition) + '</div>';
+      }
+      // ContinueOnError
+      if (step.continueOnError) {
+        html += '<div class="sf-continue">continueOnError: true</div>';
+      }
+      // Inputs
+      var inputKeys = step.inputs ? Object.keys(step.inputs) : [];
+      if (inputKeys.length > 0) {
+        html += '<div class="sf-inputs">';
+        html += '<span class="sf-inputs-toggle" data-toggle-inputs="1">';
+        html += 'inputs (' + inputKeys.length + ') &#9662;</span>';
+        html += '<div class="sf-inputs-list">';
+        inputKeys.forEach(function(k) {
+          var val = step.inputs[k] || '';
+          var isLong = val.length > 80;
+          var display = isLong ? val.substring(0, 77) + '...' : val;
+          html += '<div class="sf-input-row"><span class="sf-input-key">' + esc(k) + ':</span>';
+          if (isLong) {
+            html += '<span class="sf-input-val truncated" data-toggle-script="1">' + esc(display) + '</span></div>';
+            html += '<div class="sf-script-full">' + esc(val) + '</div>';
+          } else {
+            html += '<span class="sf-input-val">' + esc(display) + '</span></div>';
+          }
+        });
+        html += '</div></div>';
+      }
       if (step.type === 'template' && step.resolvedPath)
         html += '<div class="sf-nav">Click to visualize &rarr;</div>';
       html += '</div></div>';
@@ -508,14 +660,20 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   }
 
   // -- Render based on template type --
-  if (MODEL.templateType === 'steps' && stages.length === 1 && stages[0].jobs.length === 1) {
+  var directSteps = (MODEL.templateType === 'steps' && stages.length === 1
+    && stages[0].jobs && stages[0].jobs.length === 1
+    && stages[0].jobs[0].steps);
+  var directJobs = (MODEL.templateType === 'jobs' && stages.length === 1
+    && stages[0].jobs && stages[0].jobs.length > 0);
+
+  if (directSteps) {
     // Step template: render steps directly without stage/job wrapper
     var stepContainer = document.createElement('div');
     stepContainer.className = 'direct-steps';
     stepContainer.innerHTML = renderStepFlow(stages[0].jobs[0].steps);
     canvas.appendChild(stepContainer);
     canvas.style.padding = '20px';
-  } else if (MODEL.templateType === 'jobs' && stages.length === 1) {
+  } else if (directJobs) {
     // Job template: render jobs directly without stage wrapper
     var jobContainer = document.createElement('div');
     jobContainer.className = 'direct-jobs';
@@ -548,6 +706,24 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Wire click events (delegate on canvas) --
   canvas.addEventListener('click', function(e) {
+    // Inputs toggle
+    var toggle = e.target.closest('[data-toggle-inputs]');
+    if (toggle) {
+      e.stopPropagation();
+      var list = toggle.parentElement.querySelector('.sf-inputs-list');
+      if (list) list.classList.toggle('expanded');
+      return;
+    }
+    // Script full-text expand
+    var scriptToggle = e.target.closest('[data-toggle-script]');
+    if (scriptToggle) {
+      e.stopPropagation();
+      var fullBlock = scriptToggle.parentElement.nextElementSibling;
+      if (fullBlock && fullBlock.classList.contains('sf-script-full')) {
+        fullBlock.classList.toggle('expanded');
+      }
+      return;
+    }
     // Template step navigation (highest priority - do not toggle stage)
     var navCard = e.target.closest('[data-nav-path]');
     if (navCard) {
@@ -674,7 +850,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     stages.forEach(function(s) {
       var to = nodePositions[s.name];
       if (!to) return;
-      var deps = s.dependsOn.filter(function(d) {
+      var deps = (s.dependsOn || []).filter(function(d) {
         return nodePositions[d] && !/\$\{\{/.test(d);
       });
       deps.forEach(function(dn) {
@@ -731,6 +907,15 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   document.getElementById('btnResetZoom').addEventListener('click', function() {
     zoom = 1; canvas.style.transform = 'scale(1)';
   });
+
+  // Header params toggle
+  var hpToggle = document.querySelector('[data-toggle-header-params]');
+  if (hpToggle) {
+    hpToggle.addEventListener('click', function() {
+      var grid = hpToggle.parentElement.querySelector('.header-params-grid');
+      if (grid) grid.classList.toggle('collapsed');
+    });
+  }
 
   } catch(err) {
     document.getElementById('canvas').innerHTML =

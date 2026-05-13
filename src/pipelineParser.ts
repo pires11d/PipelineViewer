@@ -50,8 +50,9 @@ export interface StageNode {
   templateResolved: boolean;
   resolvedPath: string;
   jobs: JobNode[];
-  type: 'build' | 'deploy' | 'validate' | 'detect' | 'sync' | 'template' | 'generic';
+  type: 'test' | 'nuget' | 'database' | 'build' | 'deploy' | 'validate' | 'detect' | 'sync' | 'template' | 'generic';
   skipped: boolean;
+  parameters: Record<string, string>;
 }
 
 export interface JobNode {
@@ -64,6 +65,7 @@ export interface JobNode {
   isDeployment: boolean;
   environment: string;
   steps: StepNode[];
+  parameters: Record<string, string>;
 }
 
 export interface StepNode {
@@ -75,6 +77,9 @@ export interface StepNode {
   templateResolved: boolean;
   resolvedPath: string;
   childSteps: StepNode[];
+  condition: string;
+  continueOnError: boolean;
+  inputs: Record<string, string>;
 }
 
 // -- Parser --
@@ -287,11 +292,28 @@ export class PipelineParser {
       const inner = this.parseFileForStages(resolved, depth + 1);
       this.visited.delete(key);
 
-      // Tag each with the template source
+      // Build effective params: template defaults + caller overrides
+      const callerParams = this.extractParams(item);
+      const effectiveParams = this.buildTemplateEffectiveParams(resolved, callerParams);
+
       for (const s of inner) {
         if (!s.templateRef) { s.templateRef = ref; }
         s.templateResolved = true;
         if (!s.resolvedPath) { s.resolvedPath = resolved; }
+        if (Object.keys(s.parameters).length === 0) { s.parameters = callerParams; }
+        // Resolve parameter refs in stage name/displayName/dependsOn using effective params
+        if (Object.keys(effectiveParams).length > 0) {
+          const oldName = s.name;
+          s.name = this.substituteParams(s.name, effectiveParams);
+          s.displayName = this.substituteParams(s.displayName, effectiveParams);
+          s.dependsOn = s.dependsOn.map(d => this.substituteParams(d, effectiveParams));
+          // Update other stages' dependsOn if they referenced the old name
+          if (s.name !== oldName) {
+            for (const other of inner) {
+              other.dependsOn = other.dependsOn.map(d => d === oldName ? s.name : d);
+            }
+          }
+        }
       }
       return inner.length > 0 ? inner : [this.unresolvedStage(ref)];
     }
@@ -374,10 +396,12 @@ export class PipelineParser {
         const doc = this.loadYamlFile(resolved);
         if (doc && doc.jobs) {
           const inner = this.parseJobs(doc.jobs, path.dirname(resolved), depth + 1);
+          const callerParams = this.extractParams(item);
           for (const j of inner) {
             if (!j.templateRef) { j.templateRef = ref; }
             j.templateResolved = true;
             if (!j.resolvedPath) { j.resolvedPath = resolved; }
+            if (Object.keys(j.parameters).length === 0) { j.parameters = callerParams; }
           }
           this.visited.delete(key);
           return inner;
@@ -490,7 +514,11 @@ export class PipelineParser {
       type: 'template',
       templateRef: ref,
       templateResolved: false,
+      resolvedPath: '',
       childSteps: [],
+      condition: this.str(item.condition),
+      continueOnError: item.continueOnError === true,
+      inputs: this.extractParams(item),
     };
 
     const resolved = this.resolveTemplatePath(ref, dir);
@@ -514,6 +542,10 @@ export class PipelineParser {
   }
 
   private buildStep(item: any): StepNode {
+    const condition = this.str(item.condition);
+    const continueOnError = item.continueOnError === true;
+    const inputs = this.extractInputs(item);
+
     if (item.task) {
       const taskStr = this.str(item.task);
       const taskLower = taskStr.toLowerCase();
@@ -526,6 +558,7 @@ export class PipelineParser {
         displayName: this.str(item.displayName) || taskStr,
         type: stepType,
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+        condition, continueOnError, inputs,
       };
     }
     if (item.script !== undefined) {
@@ -535,6 +568,7 @@ export class PipelineParser {
         displayName: this.str(item.displayName) || 'Script',
         type: 'script',
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+        condition, continueOnError, inputs,
       };
     }
     if (item.powershell !== undefined) {
@@ -544,6 +578,7 @@ export class PipelineParser {
         displayName: this.str(item.displayName) || 'PowerShell',
         type: 'powershell',
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+        condition, continueOnError, inputs,
       };
     }
     if (item.bash !== undefined) {
@@ -553,6 +588,7 @@ export class PipelineParser {
         displayName: this.str(item.displayName) || 'Bash',
         type: 'bash',
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+        condition, continueOnError, inputs,
       };
     }
     if (item.checkout !== undefined) {
@@ -562,6 +598,7 @@ export class PipelineParser {
         displayName: this.str(item.checkout) === 'none' ? 'Checkout: none' : 'Checkout: self',
         type: 'checkout',
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+        condition, continueOnError, inputs: {},
       };
     }
     // Inline powershell task
@@ -572,6 +609,7 @@ export class PipelineParser {
         displayName: this.str(item.displayName) || 'PowerShell Task',
         type: 'powershell',
         templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+        condition, continueOnError, inputs,
       };
     }
     return {
@@ -580,7 +618,49 @@ export class PipelineParser {
       displayName: this.str(item.displayName) || 'Step',
       type: 'script',
       templateRef: '', templateResolved: false, resolvedPath: '', childSteps: [],
+      condition, continueOnError, inputs,
     };
+  }
+
+  private extractInputs(item: any): Record<string, string> {
+    const result: Record<string, string> = {};
+    if (item.inputs && typeof item.inputs === 'object') {
+      for (const [k, v] of Object.entries(item.inputs)) {
+        result[k] = this.str(v);
+      }
+    }
+    return result;
+  }
+
+  private extractParams(item: any): Record<string, string> {
+    const result: Record<string, string> = {};
+    if (item.parameters && typeof item.parameters === 'object') {
+      for (const [k, v] of Object.entries(item.parameters)) {
+        result[k] = this.str(v);
+      }
+    }
+    return result;
+  }
+
+  // Merge template file's parameter defaults with caller-supplied overrides
+  private buildTemplateEffectiveParams(resolvedPath: string, callerParams: Record<string, string>): Record<string, string> {
+    const effective: Record<string, string> = {};
+    try {
+      const doc = this.loadYamlFile(resolvedPath);
+      if (doc && Array.isArray(doc.parameters)) {
+        for (const p of doc.parameters) {
+          if (p && p.name) {
+            const defaultVal = p.default !== undefined && p.default !== null ? this.str(p.default) : '';
+            if (defaultVal) { effective[p.name] = defaultVal; }
+          }
+        }
+      }
+    } catch { /* ignore */ }
+    // Caller overrides trump defaults
+    for (const [k, v] of Object.entries(callerParams)) {
+      effective[k] = v;
+    }
+    return effective;
   }
 
   // -- Template Path Resolution --
@@ -695,7 +775,6 @@ export class PipelineParser {
     // all depend on the same predecessor (like ADO parallel branches).
     for (let i = 1; i < stages.length; i++) {
       const stage = stages[i];
-      if (stage.isConditional) { continue; }
 
       const hasRealDeps = stage.dependsOn.length > 0 &&
         stage.dependsOn.some(d => !/\$\{\{/.test(d));
@@ -709,10 +788,7 @@ export class PipelineParser {
       if (unresolvedExpr) {
         // Look backward for a sibling with the same unresolved expression
         for (let j = i - 1; j >= 0; j--) {
-          if (stages[j].isConditional) { continue; }
           // Check if this earlier stage had the same unresolved dep
-          // (it will have been replaced by now, but we can check if it
-          //  also points to the same predecessor)
           const jHadSameExpr = this.originalDeps.get(stages[j].name) === unresolvedExpr;
           if (jHadSameExpr && stages[j].dependsOn.length > 0) {
             stage.dependsOn = [...stages[j].dependsOn];
@@ -723,12 +799,10 @@ export class PipelineParser {
         }
       }
       if (!resolved) {
-        // Default: depend on the nearest previous non-conditional stage
+        // Default: depend on the nearest previous stage
         for (let j = i - 1; j >= 0; j--) {
-          if (!stages[j].isConditional) {
-            stage.dependsOn = [stages[j].name];
-            break;
-          }
+          stage.dependsOn = [stages[j].name];
+          break;
         }
       }
       // Track original expression for sibling matching
@@ -861,6 +935,7 @@ export class PipelineParser {
       isConditional: false, conditionalExpr: '',
       templateRef: '', templateResolved: false, resolvedPath: '',
       jobs: [], type: 'generic', skipped: false,
+      parameters: {},
     };
   }
 
@@ -871,6 +946,7 @@ export class PipelineParser {
       templateRef: '', templateResolved: false, resolvedPath: '',
       isDeployment: false, environment: '',
       steps: [],
+      parameters: {},
     };
   }
 
@@ -886,9 +962,12 @@ export class PipelineParser {
 
   private inferStageType(name: string, displayName: string): StageNode['type'] {
     const combined = `${name} ${displayName}`.toLowerCase();
-    if (combined.includes('deploy')) { return 'deploy'; }
-    if (combined.includes('build') || combined.includes('sign') || combined.includes('restore')) { return 'build'; }
+    if (combined.includes('nuget')) { return 'nuget'; }
+    if (combined.includes('database')) { return 'database'; }
+    if (combined.includes('deploy') || combined.includes('sign')) { return 'deploy'; }
+    if (combined.includes('build') || combined.includes('restore')) { return 'build'; }
     if (combined.includes('validat') || combined.includes('alert')) { return 'validate'; }
+    if (combined.includes('test')) { return 'test'; }
     if (combined.includes('detect') || combined.includes('determine') || combined.includes('extract')) { return 'detect'; }
     if (combined.includes('synchroniz') || combined.includes('backfill') || combined.includes('drift') || combined.includes('sync')) { return 'sync'; }
     return 'generic';

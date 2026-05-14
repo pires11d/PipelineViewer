@@ -47,6 +47,10 @@ export class PipelineViewerPanel {
           const maxDepth = config.get<number>('maxTemplateDepth', 10);
           const parser = new PipelineParser(workspaceFolders, manualMappings, maxDepth);
           const newModel = parser.parse(msg.path);
+          // Apply caller params from the navigation source (step inputs)
+          if (msg.callerParams && typeof msg.callerParams === 'object') {
+            newModel.callerParams = { ...newModel.callerParams, ...msg.callerParams };
+          }
           const newPanel = vscode.window.createWebviewPanel(
             'adoPipelineViewer',
             `Pipeline: ${newModel.fileName}`,
@@ -200,6 +204,11 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
   display: inline-block; padding: 1px 6px; border-radius: 3px;
   font-size: 10px; font-weight: 600; margin-right: 4px;
 }
+.sn-tag {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 9px; font-weight: 600; margin-right: 4px; opacity: 0.85;
+}
+.badge-stage { background: #ce93d820; color: #ce93d8; }
 .sn-footer {
   padding: 4px 12px 8px; font-size: 10px; opacity: 0.5;
   border-top: 1px solid var(--vscode-panel-border, #444);
@@ -316,6 +325,9 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .step-flow-card .sf-name { font-weight: 600; font-size: 11px; }
 .step-flow-card .sf-type { font-size: 9px; opacity: 0.5; }
 .step-flow-card .sf-tpl { font-size: 9px; color: #ce93d8; word-break: break-all; }
+.sf-type-label { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px; margin-bottom: 2px; display: inline-block; }
+.sf-label-step { background: #ce93d820; color: #ce93d8; }
+.sf-label-task { background: #4fc3f720; color: #4fc3f7; }
 
 .step-flow-card.sf-template { border-left-color: #ce93d8; cursor: pointer; }
 .step-flow-card.sf-template:hover { background: #ce93d815; }
@@ -456,9 +468,8 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       var s = stageMap[name];
       if (!s) { layers[name] = 0; return 0; }
       // Filter to only resolved dependencies (skip unresolved parameter refs and missing stages)
-      var resolvedDeps = (s.dependsOn || []).filter(function(d) {
-        return stageMap[d] && !/\$\{\{/.test(d);
-      });
+      // Also skip dependencies on skipped stages -- use the skipped stage's own deps instead
+      var resolvedDeps = getEffectiveDeps(s);
       if (resolvedDeps.length === 0) { layers[name] = 0; return 0; }
       var mx = 0;
       resolvedDeps.forEach(function(dep) {
@@ -466,6 +477,28 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       });
       layers[name] = mx; return mx;
     }
+
+    // Get effective dependencies, collapsing through skipped stages
+    function getEffectiveDeps(s) {
+      var direct = (s.dependsOn || []).filter(function(d) {
+        return stageMap[d] && !/\$\{\{/.test(d);
+      });
+      var result = [];
+      for (var i = 0; i < direct.length; i++) {
+        var dep = stageMap[direct[i]];
+        if (dep && dep.skipped) {
+          // Collapse through skipped stage: use its deps instead
+          var collapsed = getEffectiveDeps(dep);
+          for (var j = 0; j < collapsed.length; j++) {
+            if (result.indexOf(collapsed[j]) === -1) result.push(collapsed[j]);
+          }
+        } else {
+          if (result.indexOf(direct[i]) === -1) result.push(direct[i]);
+        }
+      }
+      return result;
+    }
+
     stages.forEach(function(s) { getLayer(s.name); });
 
     // Second pass: stages with ALL unresolved deps that got layer 0
@@ -473,9 +506,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     stages.forEach(function(s, idx) {
       if (idx === 0) return;
       var hasDeps = s.dependsOn && s.dependsOn.length > 0;
-      var resolvedDeps = hasDeps ? s.dependsOn.filter(function(d) {
-        return stageMap[d] && !/\$\{\{/.test(d);
-      }) : [];
+      var resolvedDeps = hasDeps ? getEffectiveDeps(s) : [];
       // If stage has deps but none resolved, place it after the highest-layer predecessor
       if (hasDeps && resolvedDeps.length === 0 && (layers[s.name] || 0) === 0) {
         var bestLayer = 0;
@@ -501,8 +532,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Build stage nodes --
   function buildStageHtml(s) {
-    var h = '<div class="sn-header"><span class="sn-badge badge-' + s.type + '">'
-      + s.type.toUpperCase() + '</span> ' + esc(s.displayName) + '</div>';
+    var h = '<div class="sn-header">';
+    h += '<span class="sn-badge badge-stage">STAGE</span> ';
+    h += '<span class="sn-tag badge-' + s.type + '">' + s.type.toUpperCase() + '</span> ';
+    h += esc(s.displayName) + '</div>';
     if (s.name !== s.displayName) h += '<div class="sn-sub">' + esc(s.name) + '</div>';
     if (s.isConditional && s.conditionalExpr)
       h += '<div class="cond-label">if: ' + esc(s.conditionalExpr) + '</div>';
@@ -605,22 +638,32 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     var html = '';
     steps.forEach(function(step, i) {
       var isLast = (i === steps.length - 1);
-      var navAttr = (step.type === 'template' && step.resolvedPath)
-        ? ' data-nav-path="' + esc(step.resolvedPath) + '"' : '';
+      var navAttr = '';
+      if (step.type === 'template' && step.resolvedPath) {
+        navAttr = ' data-nav-path="' + esc(step.resolvedPath) + '"';
+        // Store inputs as caller params for navigation
+        if (step.inputs && Object.keys(step.inputs).length > 0) {
+          navAttr += " data-nav-params='" + esc(JSON.stringify(step.inputs)) + "'";
+        }
+      }
       html += '<div class="step-flow-item">';
       html += '<div class="step-flow-connector"><div class="step-flow-dot dot-' + step.type + '"></div>';
       if (!isLast) html += '<div class="step-flow-line"></div>';
       html += '</div>';
       html += '<div class="step-flow-card sf-' + step.type + '"' + navAttr + '>';
+      // Consistent type label
+      var stepLabel = (step.type === 'template') ? 'STEP' : (step.type === 'checkout') ? 'STEP' : 'TASK';
+      var stepLabelCls = (step.type === 'template') ? 'sf-label-step' : 'sf-label-task';
+      html += '<span class="sf-type-label ' + stepLabelCls + '">' + stepLabel + '</span>';
       html += '<div class="sf-name">' + esc(step.displayName) + '</div>';
       // Task badge with version (e.g. VSBuild@1)
       if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
         var bc = getTaskBadgeClass(step.name);
         html += '<span class="sf-task-badge ' + bc + '">' + esc(step.name) + '</span>';
-      } else {
+      } else if (step.type !== 'template') {
         html += '<div class="sf-type">' + esc(step.type) + '</div>';
       }
-      if (step.templateRef) html += '<div class="sf-tpl">' + esc(step.templateRef) + '</div>';
+      if (step.templateRef) html += '<div class="sf-tpl">template: ' + esc(step.templateRef) + '</div>';
       // Condition
       if (step.condition) {
         html += '<div class="sf-condition">' + esc(step.condition) + '</div>';
@@ -728,7 +771,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     var navCard = e.target.closest('[data-nav-path]');
     if (navCard) {
       e.stopPropagation();
-      vscode.postMessage({ command: 'visualizeTemplate', path: navCard.getAttribute('data-nav-path') });
+      var navParams = {};
+      var rawParams = navCard.getAttribute('data-nav-params');
+      if (rawParams) { try { navParams = JSON.parse(rawParams); } catch(ex) {} }
+      vscode.postMessage({ command: 'visualizeTemplate', path: navCard.getAttribute('data-nav-path'), callerParams: navParams });
       return;
     }
     // Job navigation
@@ -767,6 +813,13 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       var el = canvas.querySelector('[data-stage="' + CSS.escape(s.name) + '"]');
       if (el) { el.classList.add('expanded'); expandedStages[s.name] = true; }
     });
+    // Expand all param/input toggles too
+    canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) {
+      list.classList.add('expanded');
+    });
+    // Expand header params grid
+    var hpGrid = document.querySelector('.header-params-grid');
+    if (hpGrid) hpGrid.classList.remove('collapsed');
     relayout();
   }
 
@@ -776,6 +829,13 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       if (el) el.classList.remove('expanded');
     });
     expandedStages = {};
+    // Collapse all param/input toggles too
+    canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) {
+      list.classList.remove('expanded');
+    });
+    // Collapse header params grid
+    var hpGrid = document.querySelector('.header-params-grid');
+    if (hpGrid) hpGrid.classList.add('collapsed');
     relayout();
   }
 

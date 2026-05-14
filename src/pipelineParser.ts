@@ -294,6 +294,7 @@ export class PipelineParser {
 
       // Build effective params: template defaults + caller overrides
       const callerParams = this.extractParams(item);
+      const rawCallerParams = this.extractRawParams(item);
       const effectiveParams = this.buildTemplateEffectiveParams(resolved, callerParams);
 
       for (const s of inner) {
@@ -306,7 +307,11 @@ export class PipelineParser {
           const oldName = s.name;
           s.name = this.substituteParams(s.name, effectiveParams);
           s.displayName = this.substituteParams(s.displayName, effectiveParams);
-          s.dependsOn = s.dependsOn.map(d => this.substituteParams(d, effectiveParams));
+
+          // Special handling for dependsOn: if a dep is a whole-expression
+          // referencing an array-typed parameter, resolve it to proper deps
+          s.dependsOn = this.resolveDependsOnParams(s.dependsOn, effectiveParams, rawCallerParams);
+
           // Update other stages' dependsOn if they referenced the old name
           if (s.name !== oldName) {
             for (const other of inner) {
@@ -532,6 +537,15 @@ export class PipelineParser {
             step.childSteps = this.parseSteps(doc.steps, path.dirname(resolved), depth + 1);
             step.templateResolved = true;
             step.resolvedPath = resolved;
+            // Use the first child step's displayName as the template's displayName
+            // (avoids showing the filename when a meaningful name exists inside)
+            if (step.childSteps.length > 0 && step.childSteps[0].displayName) {
+              const childName = step.childSteps[0].displayName;
+              const fallback = path.basename(ref, '.yml');
+              if (childName !== fallback && childName !== step.childSteps[0].name) {
+                step.displayName = childName;
+              }
+            }
           }
         } catch { /* show as unresolved */ }
         this.visited.delete(key);
@@ -637,6 +651,17 @@ export class PipelineParser {
     if (item.parameters && typeof item.parameters === 'object') {
       for (const [k, v] of Object.entries(item.parameters)) {
         result[k] = this.str(v);
+      }
+    }
+    return result;
+  }
+
+  // Extract raw parameter values preserving arrays/objects (for dependsOn resolution)
+  private extractRawParams(item: any): Record<string, any> {
+    const result: Record<string, any> = {};
+    if (item.parameters && typeof item.parameters === 'object') {
+      for (const [k, v] of Object.entries(item.parameters)) {
+        result[k] = v;
       }
     }
     return result;
@@ -766,6 +791,40 @@ export class PipelineParser {
       return result;
     }
     return [];
+  }
+
+  // Resolve dependsOn entries that are whole-expression parameter refs
+  // (e.g. "${{ parameters.dependsOn }}") where the raw caller value is an array.
+  // This properly expands array-typed dependsOn params passed to stage templates.
+  private resolveDependsOnParams(
+    deps: string[],
+    effectiveParams: Record<string, string>,
+    rawCallerParams: Record<string, any>
+  ): string[] {
+    const result: string[] = [];
+    for (const d of deps) {
+      // Check if this dep is a single whole-expression param ref
+      const wholeMatch = d.match(/^\$\{\{\s*parameters\.(\w+)\s*\}\}$/);
+      if (wholeMatch) {
+        const paramName = wholeMatch[1];
+        const rawVal = rawCallerParams[paramName];
+        if (Array.isArray(rawVal)) {
+          // Parse the raw array the same way we parse dependsOn from YAML
+          result.push(...this.parseDependsOn(rawVal));
+        } else if (rawVal !== undefined && rawVal !== null) {
+          // Scalar value -- just substitute
+          result.push(this.str(rawVal));
+        } else if (paramName in effectiveParams) {
+          result.push(effectiveParams[paramName]);
+        } else {
+          result.push(d); // Keep unresolved
+        }
+      } else {
+        // Normal string substitution for embedded refs
+        result.push(this.substituteParams(d, effectiveParams));
+      }
+    }
+    return result;
   }
 
   private fixDependencies(stages: StageNode[]): void {

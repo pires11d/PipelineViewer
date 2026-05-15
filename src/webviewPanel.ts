@@ -59,6 +59,9 @@ export class PipelineViewerPanel {
           );
           // Each navigated template gets its own panel instance
           new PipelineViewerPanel(newPanel, newModel);
+          // Reveal navigated file in Explorer
+          const navUri = vscode.Uri.file(msg.path);
+          vscode.commands.executeCommand('revealInExplorer', navUri);
         } catch (err: any) {
           vscode.window.showErrorMessage(`Template parse error: ${err.message}`);
         }
@@ -106,6 +109,14 @@ export class PipelineViewerPanel {
     <button id="btnZoomIn" title="Zoom In">+</button>
     <button id="btnZoomOut" title="Zoom Out">-</button>
     <button id="btnResetZoom" title="Reset Zoom">Reset</button>
+    <button id="btnOpenSource" title="Open YAML source file">Open Source</button>
+    <span class="toolbar-sep"></span>
+    <label class="toolbar-label" for="themeSelect">Theme:</label>
+    <select id="themeSelect" title="Color theme">
+      <option value="system">System</option>
+      <option value="dark">Dark</option>
+      <option value="light">Light</option>
+    </select>
   </div>
   <div id="canvas-wrapper">
     <div id="canvas"></div>
@@ -136,17 +147,22 @@ header {
   border-bottom: 1px solid var(--vscode-panel-border, #444);
   flex-shrink: 0;
 }
-header h1 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+header h1 { font-size: 16px; font-weight: 600; margin-bottom: 4px; display: inline; }
 header .pipeline-name { font-size: 12px; font-weight: 600; opacity: 0.6; margin-bottom: 4px; }
-header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wrap: wrap; }
+header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
 header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .label { color: var(--vscode-descriptionForeground, #888); }
+.template-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 10px; vertical-align: middle; letter-spacing: 0.5px; }
+.template-type-badge.ttb-pipeline { background: #4fc3f720; color: #4fc3f7; }
+.template-type-badge.ttb-stages { background: #ce93d820; color: #ce93d8; }
+.template-type-badge.ttb-jobs { background: #81c78420; color: #81c784; }
+.template-type-badge.ttb-steps { background: #ffb74d20; color: #ffb74d; }
 
 .header-params { margin-top: 6px; }
 .header-params-toggle { font-size: 11px; cursor: pointer; user-select: none; color: #90a4ae; display: inline-flex; align-items: center; gap: 4px; }
 .header-params-toggle:hover { color: #b0bec5; }
 .param-count { opacity: 0.7; }
-.header-params-grid { margin-top: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
+.header-params-grid { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; max-width: 500px; }
 .header-params-grid.collapsed { display: none; }
 .header-param-item { display: flex; gap: 6px; align-items: baseline; font-size: 11px; padding: 2px 0; border-bottom: 1px solid #ffffff08; }
 .header-param-key { color: #81d4fa; font-family: monospace; white-space: nowrap; font-weight: 500; }
@@ -170,6 +186,48 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 }
 #toolbar button:hover {
   background: var(--vscode-button-secondaryHoverBackground, #505050);
+}
+.toolbar-sep { width: 1px; background: var(--vscode-panel-border, #444); align-self: stretch; margin: 2px 4px; }
+.toolbar-label { font-size: 11px; color: var(--vscode-descriptionForeground, #888); align-self: center; }
+#themeSelect {
+  background: var(--vscode-dropdown-background, #3c3c3c);
+  color: var(--vscode-dropdown-foreground, #ccc);
+  border: 1px solid var(--vscode-dropdown-border, #555);
+  border-radius: 4px; padding: 3px 6px; font-size: 12px; cursor: pointer;
+}
+
+/* ===== Theme Overrides ===== */
+body[data-theme="dark"] {
+  --vscode-editor-background: #1e1e1e;
+  --vscode-editor-foreground: #cccccc;
+  --vscode-titleBar-activeBackground: #2d2d2d;
+  --vscode-sideBar-background: #252526;
+  --vscode-panel-border: #444;
+  --vscode-editorWidget-background: #2d2d2d;
+  --vscode-button-secondaryBackground: #3a3d41;
+  --vscode-button-secondaryForeground: #ccc;
+  --vscode-button-secondaryHoverBackground: #505050;
+  --vscode-descriptionForeground: #888;
+  --vscode-focusBorder: #007acc;
+  --vscode-dropdown-background: #3c3c3c;
+  --vscode-dropdown-foreground: #ccc;
+  --vscode-dropdown-border: #555;
+}
+body[data-theme="light"] {
+  --vscode-editor-background: #ffffff;
+  --vscode-editor-foreground: #1e1e1e;
+  --vscode-titleBar-activeBackground: #f3f3f3;
+  --vscode-sideBar-background: #f0f0f0;
+  --vscode-panel-border: #d4d4d4;
+  --vscode-editorWidget-background: #f8f8f8;
+  --vscode-button-secondaryBackground: #e0e0e0;
+  --vscode-button-secondaryForeground: #333;
+  --vscode-button-secondaryHoverBackground: #d0d0d0;
+  --vscode-descriptionForeground: #666;
+  --vscode-focusBorder: #0078d4;
+  --vscode-dropdown-background: #ffffff;
+  --vscode-dropdown-foreground: #333;
+  --vscode-dropdown-border: #ccc;
 }
 
 #canvas-wrapper { flex: 1; overflow: auto; position: relative; min-height: 0; }
@@ -258,6 +316,11 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
   padding: 2px 8px; display: block; margin: 0 12px 4px;
   word-break: break-all;
 }
+.sn-nav {
+  font-size: 10px; color: #4fc3f7; cursor: pointer; opacity: 0.8;
+  padding: 2px 12px 4px; display: block;
+}
+.sn-nav:hover { opacity: 1; text-decoration: underline; }
 
 /* ===== Expanded Inner Content ===== */
 .stage-inner {
@@ -371,7 +434,7 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .sf-script-full { display: none; white-space: pre-wrap; font-family: monospace; font-size: 9px; color: #c5e1a5; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 4px 6px; margin-top: 2px; max-height: 200px; overflow-y: auto; }
 .sf-script-full.expanded { display: block; }
 
-.child-flow { margin-left: 22px; border-left: 1px dashed #444; padding-left: 3px; }
+.child-flow { margin-left: 22px; border-left: 2px solid #ce93d840; border-bottom: 2px solid #ce93d840; border-bottom-left-radius: 8px; padding-left: 6px; padding-bottom: 6px; margin-bottom: 4px; background: #ce93d808; }
 
 .direct-steps { max-width: 500px; }
 .direct-jobs { max-width: 500px; }
@@ -430,7 +493,9 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       metaItems = '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
     }
   }
-  header.innerHTML = '<h1>' + esc(MODEL.fileName) + '</h1>'
+  var typeLabels = { pipeline: 'PIPELINE', stages: 'STAGE TEMPLATE', jobs: 'JOB TEMPLATE', steps: 'STEP TEMPLATE' };
+  var typeBadge = '<span class="template-type-badge ttb-' + MODEL.templateType + '">' + typeLabels[MODEL.templateType] + '</span>';
+  header.innerHTML = '<h1>' + esc(MODEL.fileName) + typeBadge + '</h1>'
     + (hasName ? '<div class="pipeline-name">' + esc(MODEL.name) + '</div>' : '')
     + '<div class="meta">' + metaItems + '</div>';
 
@@ -440,7 +505,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     var paramsHtml = '<div class="header-params">';
     paramsHtml += '<div class="header-params-toggle" data-toggle-header-params="1">';
     paramsHtml += '<span class="label">Params</span> <span class="param-count">(' + paramKeys.length + ')</span> &#9662;</div>';
-    paramsHtml += '<div class="header-params-grid">';
+    paramsHtml += '<div class="header-params-grid collapsed">';
     paramKeys.forEach(function(k) {
       var v = MODEL.callerParams[k];
       var display = (typeof v === 'object') ? JSON.stringify(v) : String(v);
@@ -527,7 +592,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   }
 
   var lo = computeLayers();
-  var NODE_W = 240, NODE_W_EXP = 420, H_GAP = 80, V_GAP = 30, PAD = 40;
+  var NODE_W = 240, NODE_W_EXP = 420, H_GAP = 80, V_GAP = 50, PAD = 40;
   var nodePositions = {};
 
   // -- Build stage nodes --
@@ -541,6 +606,13 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       h += '<div class="cond-label">if: ' + esc(s.conditionalExpr) + '</div>';
     if (s.templateRef)
       h += '<div class="tpl-label">tpl: ' + esc(s.templateRef) + '</div>';
+    if (s.templateRef && s.resolvedPath) {
+      var stageNavAttr = ' data-nav-path="' + esc(s.resolvedPath) + '"';
+      if (s.parameters && Object.keys(s.parameters).length > 0) {
+        stageNavAttr += " data-nav-params='" + esc(JSON.stringify(s.parameters)) + "'";
+      }
+      h += '<div class="sn-nav"' + stageNavAttr + '>Click to visualize &rarr;</div>';
+    }
     // Stage parameters
     var stageParamKeys = s.parameters ? Object.keys(s.parameters) : [];
     if (stageParamKeys.length > 0) {
@@ -576,8 +648,13 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   function buildJobHtml(job, ji) {
     var badgeCls = job.isDeployment ? 'job-badge-deploy' : 'job-badge-job';
     var badgeText = 'JOB';
-    var navAttr = (job.templateRef && job.resolvedPath)
-      ? ' data-job-nav="' + esc(job.resolvedPath) + '"' : '';
+    var navAttr = '';
+    if (job.templateRef && job.resolvedPath) {
+      navAttr = ' data-nav-path="' + esc(job.resolvedPath) + '"';
+      if (job.parameters && Object.keys(job.parameters).length > 0) {
+        navAttr += " data-nav-params='" + esc(JSON.stringify(job.parameters)) + "'";
+      }
+    }
 
     var h = '<div class="job-card">';
     h += '<div class="job-header">';
@@ -767,7 +844,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       }
       return;
     }
-    // Template step navigation (highest priority - do not toggle stage)
+    // Template step / stage / job navigation (highest priority - do not toggle stage)
     var navCard = e.target.closest('[data-nav-path]');
     if (navCard) {
       e.stopPropagation();
@@ -775,13 +852,6 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       var rawParams = navCard.getAttribute('data-nav-params');
       if (rawParams) { try { navParams = JSON.parse(rawParams); } catch(ex) {} }
       vscode.postMessage({ command: 'visualizeTemplate', path: navCard.getAttribute('data-nav-path'), callerParams: navParams });
-      return;
-    }
-    // Job navigation
-    var jobNav = e.target.closest('[data-job-nav]');
-    if (jobNav) {
-      e.stopPropagation();
-      vscode.postMessage({ command: 'visualizeTemplate', path: jobNav.getAttribute('data-job-nav') });
       return;
     }
     // Stage toggle (only if clicking the stage header area, not inner content)
@@ -950,10 +1020,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     svg.appendChild(poly);
   }
 
-  // -- Toolbar --
-  if (isTemplate) {
-    document.getElementById('toolbar').style.display = 'none';
-  }
+  // -- Toolbar (always visible for all template types) --
   document.getElementById('btnExpandAll').addEventListener('click', expandAll);
   document.getElementById('btnCollapseAll').addEventListener('click', collapseAll);
   document.getElementById('btnZoomIn').addEventListener('click', function() {
@@ -966,6 +1033,28 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   });
   document.getElementById('btnResetZoom').addEventListener('click', function() {
     zoom = 1; canvas.style.transform = 'scale(1)';
+  });
+  document.getElementById('btnOpenSource').addEventListener('click', function() {
+    vscode.postMessage({ command: 'openFile', path: MODEL.filePath });
+  });
+
+  // -- Theme switcher --
+  var themeSelect = document.getElementById('themeSelect');
+  var savedState = vscode.getState() || {};
+  if (savedState.theme) {
+    themeSelect.value = savedState.theme;
+    if (savedState.theme !== 'system') {
+      document.body.setAttribute('data-theme', savedState.theme);
+    }
+  }
+  themeSelect.addEventListener('change', function() {
+    var val = themeSelect.value;
+    if (val === 'system') {
+      document.body.removeAttribute('data-theme');
+    } else {
+      document.body.setAttribute('data-theme', val);
+    }
+    vscode.setState(Object.assign({}, vscode.getState() || {}, { theme: val }));
   });
 
   // Header params toggle

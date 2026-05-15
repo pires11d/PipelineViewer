@@ -6,4 +6,3 @@ esbuild.js
 *.map
 test-*.js
 out/parser-test*.js
-TODO.txt

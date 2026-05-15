@@ -153,11 +153,11 @@ header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wra
 header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .label { color: var(--vscode-descriptionForeground, #888); }
 .template-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 10px; vertical-align: middle; letter-spacing: 0.5px; border: 1px solid; }
-.template-type-badge.ttb-pipeline { background: #1a237e30; color: #7986cb; border-color: #7986cb40; }
-.template-type-badge.ttb-pipelineTemplate { background: #4a148c30; color: #ce93d8; border-color: #ce93d840; }
-.template-type-badge.ttb-stages { background: #311b9230; color: #b39ddb; border-color: #b39ddb40; }
-.template-type-badge.ttb-jobs { background: #0d47a130; color: #64b5f6; border-color: #64b5f640; }
-.template-type-badge.ttb-steps { background: #00695c30; color: #4db6ac; border-color: #4db6ac40; }
+.template-type-badge.ttb-pipeline { background: #ef535020; color: #ef5350; border-color: #ef535040; }
+.template-type-badge.ttb-pipelineTemplate { background: #f0629220; color: #f06292; border-color: #f0629240; }
+.template-type-badge.ttb-stages { background: #ba68c820; color: #ba68c8; border-color: #ba68c840; }
+.template-type-badge.ttb-jobs { background: #9575cd20; color: #9575cd; border-color: #9575cd40; }
+.template-type-badge.ttb-steps { background: #7986cb20; color: #7986cb; border-color: #7986cb40; }
 
 .header-params { margin-top: 6px; }
 .header-params-toggle { font-size: 11px; cursor: pointer; user-select: none; color: #90a4ae; display: inline-flex; align-items: center; gap: 4px; }
@@ -267,7 +267,7 @@ body[data-theme="light"] {
   display: inline-block; padding: 1px 5px; border-radius: 3px;
   font-size: 9px; font-weight: 600; margin-right: 4px; opacity: 0.85;
 }
-.badge-stage { background: #311b9230; color: #b39ddb; }
+.badge-stage { background: #ba68c820; color: #ba68c8; }
 .sn-footer {
   padding: 4px 12px 8px; font-size: 10px; opacity: 0.5;
   border-top: 1px solid var(--vscode-panel-border, #444);
@@ -318,7 +318,7 @@ body[data-theme="light"] {
   word-break: break-all;
 }
 .sn-nav {
-  font-size: 10px; color: #4db6ac; cursor: pointer; opacity: 0.8;
+  font-size: 10px; color: #7986cb; cursor: pointer; opacity: 0.8;
   padding: 2px 12px 4px; display: block;
 }
 .sn-nav:hover { opacity: 1; text-decoration: underline; }
@@ -347,13 +347,13 @@ body[data-theme="light"] {
   font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700;
   flex-shrink: 0;
 }
-.job-badge-job { background: #0d47a130; color: #64b5f6; }
-.job-badge-deploy { background: #0d47a130; color: #64b5f6; }
+.job-badge-job { background: #9575cd20; color: #9575cd; }
+.job-badge-deploy { background: #9575cd20; color: #9575cd; }
 .job-header .job-name {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
 }
 .job-header .job-nav {
-  font-size: 10px; color: #4db6ac; opacity: 0.7; cursor: pointer; flex-shrink: 0;
+  font-size: 10px; color: #7986cb; opacity: 0.7; cursor: pointer; flex-shrink: 0;
 }
 .job-header .job-nav:hover { opacity: 1; text-decoration: underline; }
 .job-meta {
@@ -367,7 +367,7 @@ body[data-theme="light"] {
 
 /* ===== Step Flow (inside job) ===== */
 .step-flow-item {
-  display: flex; align-items: stretch; margin-bottom: 1px; position: relative;
+  display: flex; align-items: stretch; margin-bottom: 0; position: relative;
 }
 .step-flow-connector {
   width: 20px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0;
@@ -384,41 +384,41 @@ body[data-theme="light"] {
   border-left: 3px solid #555;
   background: var(--vscode-editorWidget-background, #2d2d2d);
   display: flex; flex-direction: column; gap: 1px;
-  margin-bottom: 4px;
+  margin-top: 2px; margin-bottom: 2px;
 }
 .step-flow-card .sf-name { font-weight: 600; font-size: 11px; }
 .step-flow-card .sf-type { font-size: 9px; opacity: 0.5; }
-.step-flow-card .sf-tpl { font-size: 9px; color: #4db6ac; word-break: break-all; }
+.step-flow-card .sf-tpl { font-size: 9px; color: #7986cb; word-break: break-all; }
 .sf-type-label { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px; margin-bottom: 2px; display: inline-block; }
-.sf-label-step { background: #00695c30; color: #4db6ac; }
-.sf-label-task { background: #e6511530; color: #ffb74d; }
+.sf-label-step { background: #7986cb20; color: #7986cb; }
+.sf-label-task { background: #42a5f520; color: #42a5f5; }
 
-.step-flow-card.sf-template { border-left-color: #4db6ac; cursor: pointer; }
-.step-flow-card.sf-template:hover { background: #4db6ac15; }
-.step-flow-card.sf-template .sf-nav { font-size: 9px; color: #4db6ac; opacity: 0.8; }
-.step-flow-card.sf-task { border-left-color: #ffb74d; }
-.step-flow-card.sf-script, .step-flow-card.sf-powershell, .step-flow-card.sf-bash { border-left-color: #ffb74d; }
-.step-flow-card.sf-cmd { border-left-color: #90a4ae; }
+.step-flow-card.sf-template { border-left-color: #7986cb; cursor: pointer; }
+.step-flow-card.sf-template:hover { background: #7986cb15; }
+.step-flow-card.sf-template .sf-nav { font-size: 9px; color: #7986cb; opacity: 0.8; }
+.step-flow-card.sf-task { border-left-color: #42a5f5; }
+.step-flow-card.sf-script, .step-flow-card.sf-powershell, .step-flow-card.sf-bash { border-left-color: #b39ddb; }
+.step-flow-card.sf-cmd { border-left-color: #b39ddb; }
 .step-flow-card.sf-sonarqube { border-left-color: #4caf93; }
 .step-flow-card.sf-checkout { border-left-color: #81c784; }
 
-.step-flow-dot.dot-template { border-color: #4db6ac; background: #4db6ac; }
-.step-flow-dot.dot-task { border-color: #ffb74d; }
-.step-flow-dot.dot-script, .step-flow-dot.dot-powershell, .step-flow-dot.dot-bash { border-color: #ffb74d; }
-.step-flow-dot.dot-cmd { border-color: #90a4ae; }
+.step-flow-dot.dot-template { border-color: #7986cb; background: #7986cb; }
+.step-flow-dot.dot-task { border-color: #42a5f5; }
+.step-flow-dot.dot-script, .step-flow-dot.dot-powershell, .step-flow-dot.dot-bash { border-color: #b39ddb; }
+.step-flow-dot.dot-cmd { border-color: #b39ddb; }
 .step-flow-dot.dot-sonarqube { border-color: #4caf93; }
 .step-flow-dot.dot-checkout { border-color: #81c784; }
 
-.sf-task-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #ffb74d20; color: #ffb74d; display: inline-block; margin-top: 1px; font-family: monospace; }
+.sf-task-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #42a5f520; color: #42a5f5; display: inline-block; margin-top: 1px; font-family: monospace; }
 .sf-task-badge.tb-vsbuild { background: #2196f320; color: #64b5f6; }
 .sf-task-badge.tb-nuget { background: #ffb74d20; color: #ffb74d; }
 .sf-task-badge.tb-dotnet { background: #7c4dff20; color: #b388ff; }
-.sf-task-badge.tb-powershell { background: #7e57c220; color: #b39ddb; }
+.sf-task-badge.tb-powershell { background: #b39ddb20; color: #b39ddb; }
 .sf-task-badge.tb-publish { background: #66bb6a20; color: #81c784; }
 .sf-task-badge.tb-download { background: #26a69a20; color: #80cbc4; }
 .sf-task-badge.tb-copy { background: #78909c20; color: #b0bec5; }
 .sf-task-badge.tb-sonarqube { background: #4caf9320; color: #4caf93; }
-.sf-task-badge.tb-cmd { background: #90a4ae20; color: #90a4ae; }
+.sf-task-badge.tb-cmd { background: #b39ddb20; color: #b39ddb; }
 .sf-condition { font-size: 9px; color: #ffa726; margin-top: 2px; word-break: break-all; }
 .sf-condition::before { content: "IF "; font-weight: 700; }
 .sf-continue { font-size: 9px; color: #ef5350; margin-top: 1px; }
@@ -435,9 +435,9 @@ body[data-theme="light"] {
 .sf-script-full { display: none; white-space: pre-wrap; font-family: monospace; font-size: 9px; color: #c5e1a5; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 4px 6px; margin-top: 2px; max-height: 200px; overflow-y: auto; }
 .sf-script-full.expanded { display: block; }
 
-.child-flow { margin-left: 30px; padding-left: 8px; padding-top: 4px; padding-bottom: 4px; margin-bottom: 4px; margin-top: 2px; border-left: 2px solid #4db6ac40; background: #4db6ac08; border-radius: 0 0 0 6px; }
+.child-flow { margin-top: 6px; padding: 6px 6px 4px 10px; border-top: 1px solid #7986cb25; border-radius: 4px; background: #7986cb06; }
 .child-flow .step-flow-connector { display: none; }
-.child-flow .step-flow-card { margin-left: 0; }
+.child-flow .step-flow-card { margin-left: 0; border-left-width: 2px; }
 .child-flow .step-flow-item { margin-bottom: 4px; }
 
 .direct-steps { max-width: 500px; }
@@ -787,9 +787,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       }
       if (step.type === 'template' && step.resolvedPath)
         html += '<div class="sf-nav">Click to visualize &rarr;</div>';
-      html += '</div></div>';
+      // Child steps rendered INSIDE the step card for visual containment
       if (step.childSteps && step.childSteps.length > 0)
         html += '<div class="child-flow">' + renderStepFlow(step.childSteps) + '</div>';
+      html += '</div></div>';
     });
     return html;
   }

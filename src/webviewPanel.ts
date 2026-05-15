@@ -109,7 +109,7 @@ export class PipelineViewerPanel {
     <button id="btnZoomIn" title="Zoom In">+</button>
     <button id="btnZoomOut" title="Zoom Out">-</button>
     <button id="btnResetZoom" title="Reset Zoom">Reset</button>
-    <button id="btnOpenSource" title="Open YAML source file">Open Source</button>
+    <button id="btnOpenSource" title="Open YAML source file">View Source</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="themeSelect">Theme:</label>
     <select id="themeSelect" title="Color theme">

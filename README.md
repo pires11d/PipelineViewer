@@ -79,4 +79,4 @@ The extension only activates on `.yml` and `.yaml` files. Open one first.
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)

@@ -16,7 +16,7 @@ export interface PipelineModel {
   variables: VarDef[];
   stages: StageNode[];
   callerParams: Record<string, any>;
-  templateType: 'pipeline' | 'stages' | 'jobs' | 'steps';
+  templateType: 'pipeline' | 'pipelineTemplate' | 'stages' | 'jobs' | 'steps';
 }
 
 export interface ParamDef {
@@ -107,7 +107,8 @@ export class PipelineParser {
   parse(filePath: string): PipelineModel {
     this.originalDeps.clear();
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const content = this.deduplicateConditionalKeys(raw);
+    const preprocessed = this.flattenConditionalArrayItems(raw);
+    const content = this.deduplicateConditionalKeys(preprocessed);
     const doc = yaml.load(content) as any;
     if (!doc || typeof doc !== 'object') {
       throw new Error('Invalid YAML document');
@@ -158,8 +159,11 @@ export class PipelineParser {
         model.stages = [this.unresolvedStage(tplRef)];
       }
     } else if (doc.stages) {
-      model.templateType = 'stages';
-      model.stages = this.parseStages(doc.stages, dir, 0);
+      const parsedStages = this.parseStages(doc.stages, dir, 0);
+      // Multi-stage files are pipeline templates (orchestrators).
+      // Single-stage files are stage templates (provide one stage).
+      model.templateType = parsedStages.length > 1 ? 'pipelineTemplate' : 'stages';
+      model.stages = parsedStages;
     } else if (doc.jobs) {
       model.templateType = 'jobs';
       model.stages = [{
@@ -200,7 +204,8 @@ export class PipelineParser {
     if (this.fileCache.has(key)) { return this.fileCache.get(key); }
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
-      const content = this.deduplicateConditionalKeys(raw);
+      const preprocessed = this.flattenConditionalArrayItems(raw);
+      const content = this.deduplicateConditionalKeys(preprocessed);
       const doc = yaml.load(content) as any;
       this.fileCache.set(key, doc);
       return doc;
@@ -1046,6 +1051,56 @@ export class PipelineParser {
     const clean = key.replace(/__ado_dup_\d+$/, '');
     const match = clean.match(/\$\{\{\s*(.+?)\s*\}\}/);
     return match ? match[1] : clean;
+  }
+
+  // Pre-process raw YAML text to handle ADO conditional array item injection.
+  // In ADO pipelines, ${{ if ... }}: can appear inside a sequence (array)
+  // to conditionally inject items. Standard YAML parsers reject this because
+  // it mixes mapping keys into a sequence context. We flatten these by
+  // promoting the child array items into the parent sequence.
+  private flattenConditionalArrayItems(text: string): string {
+    const lines = text.split('\n');
+    const result: string[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // Detect: indentation + ${{ expr }}: where the NEXT non-empty line
+      // starts with a deeper-indented "- " (array item)
+      const condMatch = line.match(/^(\s*)\$\{\{(.+?)\}\}\s*:\s*$/);
+      if (condMatch) {
+        const condIndent = condMatch[1].length;
+        // Look ahead: if the next meaningful line is an array item
+        // at deeper indentation, this is a conditional array injection
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() === '') { j++; }
+        if (j < lines.length) {
+          const nextMatch = lines[j].match(/^(\s*)- /);
+          if (nextMatch && nextMatch[1].length > condIndent) {
+            // Flatten: skip the conditional key line, promote child items
+            // to parent indentation level (same as condIndent + standard offset)
+            // We just output child lines re-indented to condIndent level
+            const childBaseIndent = nextMatch[1].length;
+            const targetIndent = condIndent;
+            i++; // skip the ${{ }}: line
+            while (i < lines.length) {
+              const child = lines[i];
+              if (child.trim() === '') { result.push(child); i++; continue; }
+              const childCurrentIndent = child.match(/^(\s*)/)?.[1].length ?? 0;
+              if (childCurrentIndent < childBaseIndent) { break; }
+              // Re-indent: shift left by (childBaseIndent - targetIndent)
+              const shift = childBaseIndent - targetIndent;
+              const newLine = child.substring(shift);
+              result.push(newLine);
+              i++;
+            }
+            continue;
+          }
+        }
+      }
+      result.push(line);
+      i++;
+    }
+    return result.join('\n');
   }
 
   // Pre-process raw YAML text to deduplicate ADO conditional keys.

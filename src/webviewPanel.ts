@@ -152,11 +152,12 @@ header .pipeline-name { font-size: 12px; font-weight: 600; opacity: 0.6; margin-
 header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
 header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 .label { color: var(--vscode-descriptionForeground, #888); }
-.template-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 10px; vertical-align: middle; letter-spacing: 0.5px; }
-.template-type-badge.ttb-pipeline { background: #4fc3f720; color: #4fc3f7; }
-.template-type-badge.ttb-stages { background: #ce93d820; color: #ce93d8; }
-.template-type-badge.ttb-jobs { background: #81c78420; color: #81c784; }
-.template-type-badge.ttb-steps { background: #ffb74d20; color: #ffb74d; }
+.template-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 10px; vertical-align: middle; letter-spacing: 0.5px; border: 1px solid; }
+.template-type-badge.ttb-pipeline { background: #1a237e30; color: #7986cb; border-color: #7986cb40; }
+.template-type-badge.ttb-pipelineTemplate { background: #4a148c30; color: #ce93d8; border-color: #ce93d840; }
+.template-type-badge.ttb-stages { background: #311b9230; color: #b39ddb; border-color: #b39ddb40; }
+.template-type-badge.ttb-jobs { background: #0d47a130; color: #64b5f6; border-color: #64b5f640; }
+.template-type-badge.ttb-steps { background: #00695c30; color: #4db6ac; border-color: #4db6ac40; }
 
 .header-params { margin-top: 6px; }
 .header-params-toggle { font-size: 11px; cursor: pointer; user-select: none; color: #90a4ae; display: inline-flex; align-items: center; gap: 4px; }
@@ -266,7 +267,7 @@ body[data-theme="light"] {
   display: inline-block; padding: 1px 5px; border-radius: 3px;
   font-size: 9px; font-weight: 600; margin-right: 4px; opacity: 0.85;
 }
-.badge-stage { background: #ce93d820; color: #ce93d8; }
+.badge-stage { background: #311b9230; color: #b39ddb; }
 .sn-footer {
   padding: 4px 12px 8px; font-size: 10px; opacity: 0.5;
   border-top: 1px solid var(--vscode-panel-border, #444);
@@ -317,7 +318,7 @@ body[data-theme="light"] {
   word-break: break-all;
 }
 .sn-nav {
-  font-size: 10px; color: #4fc3f7; cursor: pointer; opacity: 0.8;
+  font-size: 10px; color: #4db6ac; cursor: pointer; opacity: 0.8;
   padding: 2px 12px 4px; display: block;
 }
 .sn-nav:hover { opacity: 1; text-decoration: underline; }
@@ -346,13 +347,13 @@ body[data-theme="light"] {
   font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700;
   flex-shrink: 0;
 }
-.job-badge-job { background: #4fc3f720; color: #4fc3f7; }
-.job-badge-deploy { background: #81c78420; color: #81c784; }
+.job-badge-job { background: #0d47a130; color: #64b5f6; }
+.job-badge-deploy { background: #0d47a130; color: #64b5f6; }
 .job-header .job-name {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
 }
 .job-header .job-nav {
-  font-size: 10px; color: #4fc3f7; opacity: 0.7; cursor: pointer; flex-shrink: 0;
+  font-size: 10px; color: #4db6ac; opacity: 0.7; cursor: pointer; flex-shrink: 0;
 }
 .job-header .job-nav:hover { opacity: 1; text-decoration: underline; }
 .job-meta {
@@ -387,28 +388,28 @@ body[data-theme="light"] {
 }
 .step-flow-card .sf-name { font-weight: 600; font-size: 11px; }
 .step-flow-card .sf-type { font-size: 9px; opacity: 0.5; }
-.step-flow-card .sf-tpl { font-size: 9px; color: #ce93d8; word-break: break-all; }
+.step-flow-card .sf-tpl { font-size: 9px; color: #4db6ac; word-break: break-all; }
 .sf-type-label { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px; margin-bottom: 2px; display: inline-block; }
-.sf-label-step { background: #ce93d820; color: #ce93d8; }
-.sf-label-task { background: #4fc3f720; color: #4fc3f7; }
+.sf-label-step { background: #00695c30; color: #4db6ac; }
+.sf-label-task { background: #e6511530; color: #ffb74d; }
 
-.step-flow-card.sf-template { border-left-color: #ce93d8; cursor: pointer; }
-.step-flow-card.sf-template:hover { background: #ce93d815; }
-.step-flow-card.sf-template .sf-nav { font-size: 9px; color: #4fc3f7; opacity: 0.8; }
-.step-flow-card.sf-task { border-left-color: #4fc3f7; }
+.step-flow-card.sf-template { border-left-color: #4db6ac; cursor: pointer; }
+.step-flow-card.sf-template:hover { background: #4db6ac15; }
+.step-flow-card.sf-template .sf-nav { font-size: 9px; color: #4db6ac; opacity: 0.8; }
+.step-flow-card.sf-task { border-left-color: #ffb74d; }
 .step-flow-card.sf-script, .step-flow-card.sf-powershell, .step-flow-card.sf-bash { border-left-color: #ffb74d; }
 .step-flow-card.sf-cmd { border-left-color: #90a4ae; }
 .step-flow-card.sf-sonarqube { border-left-color: #4caf93; }
 .step-flow-card.sf-checkout { border-left-color: #81c784; }
 
-.step-flow-dot.dot-template { border-color: #ce93d8; background: #ce93d8; }
-.step-flow-dot.dot-task { border-color: #4fc3f7; }
+.step-flow-dot.dot-template { border-color: #4db6ac; background: #4db6ac; }
+.step-flow-dot.dot-task { border-color: #ffb74d; }
 .step-flow-dot.dot-script, .step-flow-dot.dot-powershell, .step-flow-dot.dot-bash { border-color: #ffb74d; }
 .step-flow-dot.dot-cmd { border-color: #90a4ae; }
 .step-flow-dot.dot-sonarqube { border-color: #4caf93; }
 .step-flow-dot.dot-checkout { border-color: #81c784; }
 
-.sf-task-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #4fc3f720; color: #4fc3f7; display: inline-block; margin-top: 1px; font-family: monospace; }
+.sf-task-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #ffb74d20; color: #ffb74d; display: inline-block; margin-top: 1px; font-family: monospace; }
 .sf-task-badge.tb-vsbuild { background: #2196f320; color: #64b5f6; }
 .sf-task-badge.tb-nuget { background: #ffb74d20; color: #ffb74d; }
 .sf-task-badge.tb-dotnet { background: #7c4dff20; color: #b388ff; }
@@ -434,7 +435,10 @@ body[data-theme="light"] {
 .sf-script-full { display: none; white-space: pre-wrap; font-family: monospace; font-size: 9px; color: #c5e1a5; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 4px 6px; margin-top: 2px; max-height: 200px; overflow-y: auto; }
 .sf-script-full.expanded { display: block; }
 
-.child-flow { margin-left: 22px; border-left: 2px solid #ce93d840; border-bottom: 2px solid #ce93d840; border-bottom-left-radius: 8px; padding-left: 6px; padding-bottom: 6px; margin-bottom: 4px; background: #ce93d808; }
+.child-flow { margin-left: 30px; padding-left: 8px; padding-top: 4px; padding-bottom: 4px; margin-bottom: 4px; margin-top: 2px; border-left: 2px solid #4db6ac40; background: #4db6ac08; border-radius: 0 0 0 6px; }
+.child-flow .step-flow-connector { display: none; }
+.child-flow .step-flow-card { margin-left: 0; }
+.child-flow .step-flow-item { margin-bottom: 4px; }
 
 .direct-steps { max-width: 500px; }
 .direct-jobs { max-width: 500px; }
@@ -470,30 +474,41 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Header --
   var header = document.getElementById('header');
-  var isTemplate = (MODEL.templateType === 'steps' || MODEL.templateType === 'jobs');
   var hasName = MODEL.name && MODEL.name !== 'Unnamed Pipeline';
   var metaItems = '';
-  if (!isTemplate) {
+  if (MODEL.templateType === 'pipeline') {
     metaItems = '<span><span class="label">Trigger:</span> ' + esc(MODEL.trigger) + '</span>'
       + '<span><span class="label">PR:</span> ' + esc(MODEL.pr) + '</span>'
       + '<span><span class="label">Pool:</span> ' + esc(MODEL.pool) + '</span>'
       + '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>';
-  } else {
-    var totalSteps = 0;
-    var totalJobs = 0;
+  } else if (MODEL.templateType === 'pipelineTemplate' || MODEL.templateType === 'stages') {
+    var totalJobs = 0, totalSteps = 0;
     MODEL.stages.forEach(function(s) {
       if (!s.jobs) return;
       totalJobs += s.jobs.length;
       s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
     });
-    if (MODEL.templateType === 'jobs') {
-      metaItems = '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
-        + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
-    } else {
-      metaItems = '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
-    }
+    metaItems = '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>'
+      + '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
+      + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
+  } else if (MODEL.templateType === 'jobs') {
+    var totalJobs = 0, totalSteps = 0;
+    MODEL.stages.forEach(function(s) {
+      if (!s.jobs) return;
+      totalJobs += s.jobs.length;
+      s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
+    });
+    metaItems = '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
+      + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
+  } else {
+    var totalSteps = 0;
+    MODEL.stages.forEach(function(s) {
+      if (!s.jobs) return;
+      s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
+    });
+    metaItems = '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
   }
-  var typeLabels = { pipeline: 'PIPELINE', stages: 'STAGE TEMPLATE', jobs: 'JOB TEMPLATE', steps: 'STEP TEMPLATE' };
+  var typeLabels = { pipeline: 'PIPELINE', pipelineTemplate: 'PIPELINE TEMPLATE', stages: 'STAGE TEMPLATE', jobs: 'JOB TEMPLATE', steps: 'STEP TEMPLATE' };
   var typeBadge = '<span class="template-type-badge ttb-' + MODEL.templateType + '">' + typeLabels[MODEL.templateType] + '</span>';
   header.innerHTML = '<h1>' + esc(MODEL.fileName) + typeBadge + '</h1>'
     + (hasName ? '<div class="pipeline-name">' + esc(MODEL.name) + '</div>' : '')

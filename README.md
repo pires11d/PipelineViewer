@@ -1,4 +1,4 @@
-# Azure DevOps Pipeline Viewer
+# Azure DevOps YAML Pipeline Viewer (with Template Support)
 
 A VS Code extension that renders Azure DevOps YAML pipelines as interactive flowcharts with full recursive template resolution.
 

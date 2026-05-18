@@ -287,24 +287,24 @@ body[data-theme="light"] {
 .type-build    { border-left-color: #4fc3f7; }
 .type-deploy   { border-left-color: #81c784; }
 .type-validate { border-left-color: #ffb74d; }
-.type-detect   { border-left-color: #4dd0e1; }
+.type-detect   { border-left-color: #ff7043; }
 .type-sync     { border-left-color: #a177e9; }
 .type-template { border-left-color: #9e9e9e; }
 .type-generic  { border-left-color: #c0866c; }
 .type-test     { border-left-color: #f06292; }
 .type-nuget    { border-left-color: #ffca28; }
-.type-database { border-left-color: #4db6ac; }
+.type-database { border-left-color: #388e3c; }
 
 .badge-build    { background: #4fc3f720; color: #4fc3f7; }
 .badge-deploy   { background: #81c78420; color: #81c784; }
 .badge-validate { background: #ffb74d20; color: #ffb74d; }
-.badge-detect   { background: #4dd0e120; color: #4dd0e1; }
+.badge-detect   { background: #ff704320; color: #ff7043; }
 .badge-sync     { background: #b388ff20; color: #a177e9; }
 .badge-template { background: #9e9e9e20; color: #9e9e9e; }
 .badge-generic  { background: #d8af9320; color: #c0866c; }
 .badge-test     { background: #f0629220; color: #f06292; }
 .badge-nuget    { background: #ffca2820; color: #ffca28; }
-.badge-database { background: #4db6ac20; color: #4db6ac; }
+.badge-database { background: #388e3c20; color: #388e3c; }
 
 .cond-label {
   font-size: 10px; color: #ffb74d;
@@ -360,9 +360,15 @@ body[data-theme="light"] {
   font-size: 10px; opacity: 0.5; padding: 2px 10px 4px;
 }
 
-/* Steps container inside a job (always visible when job is inside expanded stage) */
+/* Steps container inside a job (collapsed by default, visible when job is expanded) */
 .job-steps {
   padding: 4px 6px 6px;
+  display: none;
+}
+.job-card.expanded .job-steps { display: block; }
+.job-card.expanded .job-footer { display: none; }
+.job-footer {
+  padding: 4px 10px 6px; font-size: 10px; opacity: 0.5;
 }
 
 /* ===== Step Flow (inside job) ===== */
@@ -704,6 +710,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       h += '</div></div>';
     }
 
+    // Job footer (visible when collapsed)
+    var stepCount = job.steps ? job.steps.length : 0;
+    h += '<div class="job-footer">' + stepCount + ' step(s)</div>';
+
     h += '<div class="job-steps">';
     h += renderStepFlow(job.steps);
     h += '</div></div>';
@@ -870,6 +880,18 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       vscode.postMessage({ command: 'visualizeTemplate', path: navCard.getAttribute('data-nav-path'), callerParams: navParams });
       return;
     }
+    // Job toggle (click on job-header toggles steps visibility)
+    var jobHeader = e.target.closest('.job-header');
+    if (jobHeader) {
+      // Do not toggle if clicking the nav link
+      if (e.target.closest('.job-nav')) return;
+      var jobCard = jobHeader.closest('.job-card');
+      if (jobCard) {
+        jobCard.classList.toggle('expanded');
+        relayout();
+        return;
+      }
+    }
     // Stage toggle (only if clicking the stage header area, not inner content)
     var stageEl = e.target.closest('.stage-node');
     if (stageEl) {
@@ -903,6 +925,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) {
       list.classList.add('expanded');
     });
+    // Expand all job cards
+    canvas.querySelectorAll('.job-card').forEach(function(jc) {
+      jc.classList.add('expanded');
+    });
     // Expand header params grid
     var hpGrid = document.querySelector('.header-params-grid');
     if (hpGrid) hpGrid.classList.remove('collapsed');
@@ -918,6 +944,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     // Collapse all param/input toggles too
     canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) {
       list.classList.remove('expanded');
+    });
+    // Collapse all job cards
+    canvas.querySelectorAll('.job-card').forEach(function(jc) {
+      jc.classList.remove('expanded');
     });
     // Collapse header params grid
     var hpGrid = document.querySelector('.header-params-grid');

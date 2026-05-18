@@ -97,11 +97,16 @@ export class PipelineViewerPanel {
       this.panel.webview.postMessage({ command: 'callersResult', callers: [] });
       return;
     }
-    const pattern = new vscode.RelativePattern(folders[0], '**/*.{yml,yaml}');
-    const files = await vscode.workspace.findFiles(pattern, '**/node_modules/**', 500);
+    // Search ALL workspace folders with no file limit
+    let allFiles: vscode.Uri[] = [];
+    for (const folder of folders) {
+      const pattern = new vscode.RelativePattern(folder, '**/*.{yml,yaml}');
+      const found = await vscode.workspace.findFiles(pattern, '**/node_modules/**', 5000);
+      allFiles = allFiles.concat(found);
+    }
     const callers: { name: string; path: string; relPath: string; project: string }[] = [];
 
-    for (const file of files) {
+    for (const file of allFiles) {
       if (file.fsPath === filePath) { continue; }
       try {
         const doc = await vscode.workspace.openTextDocument(file);
@@ -312,8 +317,9 @@ body[data-theme="light"] .sf-input-key { color: #0277bd; }
 body[data-theme="light"] .sf-input-val { color: #1b5e20; }
 body[data-theme="light"] .cond-label { color: #e65100; background: #ffb74d20; }
 body[data-theme="light"] .sf-condition { color: #e65100; }
-body[data-theme="light"] .sn-nav, body[data-theme="light"] .sf-nav, body[data-theme="light"] .sf-tpl { color: #283593; }
+body[data-theme="light"] .sf-tpl { color: #283593; }
 body[data-theme="light"] .job-header .job-nav { color: #283593; }
+body[data-theme="light"] .sn-open { color: #283593; }
 
 #canvas-wrapper { flex: 1; overflow: auto; position: relative; min-height: 0; }
 #canvas {
@@ -337,6 +343,7 @@ body[data-theme="light"] .job-header .job-nav { color: #283593; }
 
 .sn-header {
   padding: 10px 12px 6px; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sn-sub {
@@ -352,6 +359,11 @@ body[data-theme="light"] .job-header .job-nav { color: #283593; }
   font-size: 9px; font-weight: 600; margin-right: 4px; opacity: 0.85;
 }
 .badge-stage { background: #ba68c820; color: #ba68c8; }
+.sn-open {
+  font-size: 10px; color: #7986cb; opacity: 0.7; cursor: pointer;
+  margin-left: 8px; flex-shrink: 0;
+}
+.sn-open:hover { opacity: 1; text-decoration: underline; }
 .sn-footer {
   padding: 4px 12px 8px; font-size: 10px; opacity: 0.5;
   border-top: 1px solid var(--vscode-panel-border, #444);
@@ -401,11 +413,6 @@ body[data-theme="light"] .job-header .job-nav { color: #283593; }
   padding: 2px 8px; display: block; margin: 0 12px 4px;
   word-break: break-all;
 }
-.sn-nav {
-  font-size: 10px; color: #7986cb; cursor: pointer; opacity: 0.8;
-  padding: 2px 12px 4px; display: block;
-}
-.sn-nav:hover { opacity: 1; text-decoration: underline; }
 
 /* ===== Expanded Inner Content ===== */
 .stage-inner {
@@ -489,7 +496,6 @@ body[data-theme="light"] .sf-tpl-label { color: #666; }
 
 .step-flow-card.sf-template { border-left-color: #7986cb; cursor: pointer; }
 .step-flow-card.sf-template:hover { background: #7986cb15; }
-.step-flow-card.sf-template .sf-nav { font-size: 9px; color: #7986cb; opacity: 0.8; }
 .step-flow-card.sf-task { border-left-color: #42a5f5; }
 .step-flow-card.sf-script, .step-flow-card.sf-powershell, .step-flow-card.sf-bash { border-left-color: #b39ddb; }
 .step-flow-card.sf-cmd { border-left-color: #b39ddb; }
@@ -662,6 +668,13 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   // -- Layout --
   // Remove skipped stages entirely from display to avoid duplicate-name collisions
   var stages = MODEL.stages.filter(function(s) { return !s.skipped; });
+  // Deduplicate stages with identical names (e.g. from opposing conditional branches)
+  var seenNames = {};
+  stages = stages.filter(function(s) {
+    if (seenNames[s.name]) return false;
+    seenNames[s.name] = true;
+    return true;
+  });
   var stageMap = {};
   stages.forEach(function(s) { stageMap[s.name] = s; });
 
@@ -745,22 +758,24 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Build stage nodes --
   function buildStageHtml(s) {
+    var navAttr = '';
+    if (s.templateRef && s.resolvedPath) {
+      navAttr = ' data-nav-path="' + esc(s.resolvedPath) + '"';
+      if (s.parameters && Object.keys(s.parameters).length > 0) {
+        navAttr += " data-nav-params='" + esc(JSON.stringify(s.parameters)) + "'";
+      }
+    }
     var h = '<div class="sn-header">';
     h += '<span class="sn-badge badge-stage">STAGE</span> ';
     h += '<span class="sn-tag badge-' + s.type + '">' + s.type.toUpperCase() + '</span> ';
-    h += esc(s.displayName) + '</div>';
+    h += esc(s.displayName);
+    if (navAttr) h += '<span class="sn-open"' + navAttr + '>open &rarr;</span>';
+    h += '</div>';
     if (s.name !== s.displayName) h += '<div class="sn-sub">' + esc(s.name) + '</div>';
     if (s.isConditional && s.conditionalExpr)
       h += '<div class="cond-label">if: ' + esc(s.conditionalExpr) + '</div>';
     if (s.templateRef)
       h += '<div class="sf-tpl"><span class="sf-tpl-label">template:</span> ' + esc(s.templateRef) + '</div>';
-    if (s.templateRef && s.resolvedPath) {
-      var stageNavAttr = ' data-nav-path="' + esc(s.resolvedPath) + '"';
-      if (s.parameters && Object.keys(s.parameters).length > 0) {
-        stageNavAttr += " data-nav-params='" + esc(JSON.stringify(s.parameters)) + "'";
-      }
-      h += '<div class="sn-nav"' + stageNavAttr + '>Click to visualize &rarr;</div>';
-    }
     // Stage parameters (displayed as inputs for consistency with step design)
     var stageParamKeys = s.parameters ? Object.keys(s.parameters) : [];
     if (stageParamKeys.length > 0) {
@@ -818,9 +833,6 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     }
     if (job.templateRef) {
       h += '<div class="sf-tpl"><span class="sf-tpl-label">template:</span> ' + esc(job.templateRef) + '</div>';
-    }
-    if (job.templateRef && job.resolvedPath) {
-      h += '<div class="sn-nav"' + navAttr + '>Click to visualize &rarr;</div>';
     }
 
     // Job parameters (displayed as inputs for consistency with step design)
@@ -886,7 +898,9 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       var stepLabel = (step.type === 'template') ? 'STEP' : (step.type === 'checkout') ? 'STEP' : 'TASK';
       var stepLabelCls = (step.type === 'template') ? 'sf-label-step' : 'sf-label-task';
       html += '<span class="sf-type-label ' + stepLabelCls + '">' + stepLabel + '</span>';
-      html += '<div class="sf-name">' + esc(step.displayName) + '</div>';
+      html += '<div class="sf-name">' + esc(step.displayName);
+      if (step.type === 'template' && step.resolvedPath) html += '<span class="sn-open">open &rarr;</span>';
+      html += '</div>';
       // Task badge with version (e.g. VSBuild@1)
       if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
         var bc = getTaskBadgeClass(step.name);
@@ -924,8 +938,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
         });
         html += '</div></div>';
       }
-      if (step.type === 'template' && step.resolvedPath)
-        html += '<div class="sf-nav">Click to visualize &rarr;</div>';
+
       // Child steps rendered INSIDE the step card for visual containment
       if (step.childSteps && step.childSteps.length > 0)
         html += '<div class="child-flow">' + renderStepFlow(step.childSteps) + '</div>';

@@ -58,7 +58,7 @@ A VS Code extension that renders Azure DevOps YAML pipelines as interactive flow
 
 When a file is visualized, the extension classifies it and displays a colored badge in the header. The classification follows a gradient from high-level orchestrators down to atomic step definitions:
 
-| Badge | Classification | Detected When | Description |
+| Badge &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Classification | Detected When | Description |
 |:------|:---------------|:--------------|:------------|
 | ![Pipeline](https://img.shields.io/badge/PIPELINE-ef5350?style=flat-square&labelColor=ef535020) | Pipeline | File has `trigger`, `pool`, or uses `extends` | The entry-point YAML file that ADO executes directly |
 | ![Pipeline Template](https://img.shields.io/badge/PIPELINE_TEMPLATE-f06292?style=flat-square&labelColor=f0629220) | Pipeline Template | File defines multiple `stages:` and is referenced via `extends` | A multi-stage orchestrator template |
@@ -67,7 +67,7 @@ When a file is visualized, the extension classifies it and displays a colored ba
 | ![Step Template](https://img.shields.io/badge/STEP_TEMPLATE-7986cb?style=flat-square&labelColor=7986cb20) | Step Template | File defines `steps:` without wrapping jobs or stages | A reusable step sequence |
 | ![Task](https://img.shields.io/badge/TASK-42a5f5?style=flat-square&labelColor=42a5f520) | Resolved Task | Leaf node inside a resolved step template | A concrete ADO task (e.g., `PowerShell@2`, `VSBuild@1`) -- not a file classification |
 
-> The color gradient flows from **warm red** (high-level pipeline) through **pink** and **purple** to **cool indigo** (low-level steps), making it easy to identify at a glance where you are in the template hierarchy.
+> The color gradient flows from **warm red** (high-level pipeline) through **pink** and **purple** to **light blue** (low-level steps), making it easy to identify at a glance where you are in the template hierarchy.
 
 ---
 

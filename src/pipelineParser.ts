@@ -160,9 +160,14 @@ export class PipelineParser {
       }
     } else if (doc.stages) {
       const parsedStages = this.parseStages(doc.stages, dir, 0);
-      // Multi-stage files are pipeline templates (orchestrators).
-      // Single-stage files are stage templates (provide one stage).
-      model.templateType = parsedStages.length > 1 ? 'pipelineTemplate' : 'stages';
+      // Determine if this is a standalone pipeline or a template:
+      // Standalone pipelines have trigger/pr/pool at root level (even if set to 'none').
+      const hasRootPipelineFields = ('trigger' in doc) || ('pr' in doc) || ('pool' in doc);
+      if (hasRootPipelineFields) {
+        model.templateType = 'pipeline';
+      } else {
+        model.templateType = parsedStages.length > 1 ? 'pipelineTemplate' : 'stages';
+      }
       model.stages = parsedStages;
     } else if (doc.jobs) {
       model.templateType = 'jobs';
@@ -193,8 +198,11 @@ export class PipelineParser {
     // Fix implicit sequential dependencies (after param resolution)
     this.fixDependencies(model.stages);
 
-    // Evaluate conditional expressions against effective parameter values
-    this.evaluateConditions(model, effective);
+    // Evaluate conditional expressions only when actual caller params are present.
+    // Templates opened directly (no caller) should show all stages as active.
+    if (Object.keys(model.callerParams).length > 0) {
+      this.evaluateConditions(model, effective);
+    }
 
     return model;
   }
@@ -880,7 +888,7 @@ export class PipelineParser {
   private buildEffectiveParams(model: PipelineModel): Record<string, any> {
     const effective: Record<string, any> = {};
     for (const p of model.parameters) {
-      if (p.default !== '' && p.default !== undefined) {
+      if (p.default !== undefined && p.default !== null) {
         effective[p.name] = this.parseParamValue(p.default, p.type);
       }
     }
@@ -944,8 +952,10 @@ export class PipelineParser {
     if (andMatch) {
       const parts = this.splitTopLevelArgs(andMatch[1]);
       const results = parts.map(p => this.tryEvalCondition('if ' + p.trim(), params));
+      // Short-circuit: if any result is definitively false, and() is false
+      if (results.some(r => r === false)) { return false; }
       if (results.some(r => r === null)) { return null; }
-      return results.every(r => r === true);
+      return true;
     }
 
     // Handle or(...) wrapper
@@ -953,8 +963,10 @@ export class PipelineParser {
     if (orMatch) {
       const parts = this.splitTopLevelArgs(orMatch[1]);
       const results = parts.map(p => this.tryEvalCondition('if ' + p.trim(), params));
+      // Short-circuit: if any result is definitively true, or() is true
+      if (results.some(r => r === true)) { return true; }
       if (results.some(r => r === null)) { return null; }
-      return results.some(r => r === true);
+      return false;
     }
 
     // Match: if eq(parameters.X, Y) or if ne(parameters.X, Y)

@@ -329,7 +329,7 @@ body[data-theme="light"] .sn-open { color: #283593; }
 
 /* ===== Stage Nodes ===== */
 .stage-node {
-  position: absolute; width: 240px;
+  position: absolute; width: 280px;
   background: var(--vscode-editorWidget-background, #2d2d2d);
   border: 1px solid var(--vscode-panel-border, #555);
   border-radius: 10px; border-left: 5px solid #ce93d8;
@@ -339,7 +339,7 @@ body[data-theme="light"] .sn-open { color: #283593; }
 }
 .stage-node:hover { box-shadow: 0 0 12px rgba(255,255,255,0.08); }
 .stage-node.selected { box-shadow: 0 0 0 2px var(--vscode-focusBorder, #007acc); }
-.stage-node.expanded { width: 420px; cursor: default; }
+.stage-node.expanded { width: 460px; cursor: default; }
 
 .sn-header {
   padding: 10px 12px 6px; font-size: 13px; font-weight: 600;
@@ -753,7 +753,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   }
 
   var lo = computeLayers();
-  var NODE_W = 240, NODE_W_EXP = 420, H_GAP = 80, V_GAP = 50, PAD = 40;
+  var NODE_W = 280, NODE_W_EXP = 460, H_GAP = 80, V_GAP = 50, PAD = 40;
   var nodePositions = {};
 
   // -- Build stage nodes --
@@ -895,8 +895,18 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       html += '</div>';
       html += '<div class="step-flow-card sf-' + step.type + '"' + navAttr + '>';
       // Consistent type label
-      var stepLabel = (step.type === 'template') ? 'STEP' : (step.type === 'checkout') ? 'STEP' : 'TASK';
-      var stepLabelCls = (step.type === 'template') ? 'sf-label-step' : 'sf-label-task';
+      var stepLabel;
+      var stepLabelCls;
+      if (step.type === 'template' || step.type === 'checkout') {
+        stepLabel = 'STEP';
+        stepLabelCls = 'sf-label-step';
+      } else if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
+        stepLabel = 'TASK';
+        stepLabelCls = 'sf-label-task';
+      } else {
+        stepLabel = step.type.toUpperCase();
+        stepLabelCls = 'sf-label-step';
+      }
       html += '<span class="sf-type-label ' + stepLabelCls + '">' + stepLabel + '</span>';
       html += '<div class="sf-name">' + esc(step.displayName);
       if (step.type === 'template' && step.resolvedPath) html += '<span class="sn-open">open &rarr;</span>';

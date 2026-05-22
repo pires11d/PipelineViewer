@@ -341,14 +341,15 @@ export class PipelineParser {
   private buildStage(item: any, dir: string, depth: number): StageNode {
     // Merge properties injected via ${{ if }}: blocks into the item
     const merged = this.mergeConditionalProperties(item);
-    const name = this.str(merged.stage);
+    const name = this.str(merged.stage) || 'Stage';
+    const displayName = this.str(merged.displayName) || name;
     const stage: StageNode = {
       ...this.emptyStage(name),
-      displayName: this.str(merged.displayName) || name,
+      displayName,
       dependsOn: this.parseDependsOn(merged.dependsOn),
       condition: this.str(merged.condition),
       jobs: [],
-      type: this.inferStageType(name, this.str(merged.displayName)),
+      type: this.inferStageType(name, displayName),
     };
 
     if (merged.jobs) {
@@ -1211,6 +1212,7 @@ export class PipelineParser {
 
   private str(val: any): string {
     if (val === undefined || val === null) { return ''; }
+    if (typeof val === 'object') { return JSON.stringify(val); }
     return String(val);
   }
 }

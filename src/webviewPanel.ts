@@ -111,8 +111,11 @@ export class PipelineViewerPanel {
       try {
         const doc = await vscode.workspace.openTextDocument(file);
         const text = doc.getText();
-        // Look for template references containing this filename
-        if (text.includes(fileName)) {
+        // Match filename preceded by a non-filename character (path sep, space, colon, etc.)
+        // This prevents 'preprod-deploy.yml' from matching inside 'create-preprod-deploy.yml'
+        const escaped = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(?:^|[^a-zA-Z0-9_-])${escaped}`, 'm');
+        if (pattern.test(text)) {
           const parts = file.fsPath.replace(/\\/g, '/').split('/');
           const name = parts.pop() || '';
           // Infer project from folder structure (repo root name)
@@ -342,9 +345,13 @@ body[data-theme="light"] .sn-open { color: #283593; }
 .stage-node.expanded { width: 460px; cursor: default; }
 
 .sn-header {
-  padding: 10px 12px 6px; font-size: 13px; font-weight: 600;
-  display: flex; align-items: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 10px 12px 4px; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; flex-wrap: wrap;
+  overflow: hidden;
+}
+.sn-header .sn-title {
+  flex-basis: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px; font-size: 13px;
 }
 .sn-sub {
   padding: 0 12px 6px; font-size: 11px; opacity: 0.6;
@@ -413,6 +420,8 @@ body[data-theme="light"] .sn-open { color: #283593; }
   padding: 2px 8px; display: block; margin: 0 12px 4px;
   word-break: break-all;
 }
+.sf-tpl.navigable { cursor: pointer; }
+.sf-tpl.navigable:hover { text-decoration: underline; opacity: 1; }
 
 /* ===== Expanded Inner Content ===== */
 .stage-inner {
@@ -488,11 +497,13 @@ body[data-theme="light"] .sn-open { color: #283593; }
 .step-flow-card .sf-type { font-size: 9px; opacity: 0.5; }
 .step-flow-card .sf-tpl { font-size: 9px; color: #7986cb; word-break: break-all; }
 .stage-node .sf-tpl, .job-card .sf-tpl { font-size: 10px; color: #7986cb; word-break: break-all; padding: 2px 12px 4px; display: block; }
+.stage-node .sf-inputs, .job-card .sf-inputs { padding: 2px 12px 4px; }
 .sf-tpl-label { color: #90a4ae; }
 body[data-theme="light"] .sf-tpl-label { color: #666; }
 .sf-type-label { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px; margin-bottom: 2px; display: inline-block; }
 .sf-label-step { background: #7986cb20; color: #7986cb; }
 .sf-label-task { background: #42a5f520; color: #42a5f5; }
+.sf-label-powershell { background: #b39ddb20; color: #b39ddb; }
 
 .step-flow-card.sf-template { border-left-color: #7986cb; cursor: pointer; }
 .step-flow-card.sf-template:hover { background: #7986cb15; }
@@ -535,10 +546,15 @@ body[data-theme="light"] .sf-tpl-label { color: #666; }
 .sf-script-full { display: none; white-space: pre-wrap; font-family: monospace; font-size: 9px; color: #c5e1a5; background: #1a1a1a; border: 1px solid #333; border-radius: 3px; padding: 4px 6px; margin-top: 2px; max-height: 200px; overflow-y: auto; }
 .sf-script-full.expanded { display: block; }
 
-.child-flow { margin-top: 6px; padding: 6px 6px 4px 10px; border-top: 1px solid #7986cb25; border-radius: 4px; background: #7986cb06; }
+.child-flow { margin-top: 6px; padding: 6px 6px 4px 10px; border-top: 1px solid #7986cb25; border-radius: 4px; background: #7986cb06; display: none; }
+.step-flow-card.has-children.expanded .child-flow { display: block; }
 .child-flow .step-flow-connector { display: none; }
 .child-flow .step-flow-card { margin-left: 0; border-left-width: 2px; }
 .child-flow .step-flow-item { margin-bottom: 4px; }
+.sf-child-footer { font-size: 10px; opacity: 0.5; margin-top: 4px; }
+.step-flow-card.has-children.expanded .sf-child-footer { display: none; }
+.step-flow-card.has-children { cursor: pointer; }
+.step-flow-card.has-children:hover { box-shadow: 0 0 6px rgba(255,255,255,0.04); }
 
 .direct-steps { max-width: 500px; }
 .direct-jobs { max-width: 500px; }
@@ -632,11 +648,12 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   }
   var typeLabels = { pipeline: 'PIPELINE', pipelineTemplate: 'PIPELINE TEMPLATE', stages: 'STAGE TEMPLATE', jobs: 'JOB TEMPLATE', steps: 'STEP TEMPLATE' };
   var typeBadge = '<span class="template-type-badge ttb-' + MODEL.templateType + '">' + typeLabels[MODEL.templateType] + '</span>';
-  // Show workspace-relative directory path above the filename
+  // Show last 2 directory segments above the filename
   var projectLabel = '';
   if (RELATIVE_PATH) {
     var relParts = RELATIVE_PATH.replace(/\\\\/g, '/').split('/');
     relParts.pop(); // remove filename
+    if (relParts.length > 2) relParts = relParts.slice(-2);
     if (relParts.length > 0) projectLabel = relParts.join('/');
   }
   header.innerHTML = (projectLabel ? '<div class="project-label">' + esc(projectLabel) + '</div>' : '')
@@ -757,25 +774,32 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   var nodePositions = {};
 
   // -- Build stage nodes --
+  // Humanize unresolved parameter expressions for display
+  function humanize(text) {
+    if (!text) return '(unnamed)';
+    return text.replace(/\$\{\{\s*parameters\.(\w+)\s*\}\}/g, function(_, k) {
+      return '(' + k + ')';
+    });
+  }
+
   function buildStageHtml(s) {
-    var navAttr = '';
-    if (s.templateRef && s.resolvedPath) {
-      navAttr = ' data-nav-path="' + esc(s.resolvedPath) + '"';
-      if (s.parameters && Object.keys(s.parameters).length > 0) {
-        navAttr += " data-nav-params='" + esc(JSON.stringify(s.parameters)) + "'";
-      }
-    }
+    var title = s.displayName || s.name || '(unnamed)';
+    title = humanize(title);
     var h = '<div class="sn-header">';
     h += '<span class="sn-badge badge-stage">STAGE</span> ';
-    h += '<span class="sn-tag badge-' + s.type + '">' + s.type.toUpperCase() + '</span> ';
-    h += esc(s.displayName);
-    if (navAttr) h += '<span class="sn-open"' + navAttr + '>open &rarr;</span>';
+    h += '<span class="sn-tag badge-' + s.type + '">' + s.type.toUpperCase() + '</span>';
+    h += '<span class="sn-title">' + esc(title) + '</span>';
     h += '</div>';
-    if (s.name !== s.displayName) h += '<div class="sn-sub">' + esc(s.name) + '</div>';
     if (s.isConditional && s.conditionalExpr)
       h += '<div class="cond-label">if: ' + esc(s.conditionalExpr) + '</div>';
-    if (s.templateRef)
-      h += '<div class="sf-tpl"><span class="sf-tpl-label">template:</span> ' + esc(s.templateRef) + '</div>';
+    if (s.templateRef) {
+      var tplNavCls = s.resolvedPath ? ' navigable' : '';
+      var tplNavData = s.resolvedPath ? ' data-nav-path="' + esc(s.resolvedPath) + '"' : '';
+      if (s.resolvedPath && s.parameters && Object.keys(s.parameters).length > 0) {
+        tplNavData += " data-nav-params='" + esc(JSON.stringify(s.parameters)) + "'";
+      }
+      h += '<div class="sf-tpl' + tplNavCls + '"' + tplNavData + '><span class="sf-tpl-label">template:</span> ' + esc(s.templateRef) + '</div>';
+    }
     // Stage parameters (displayed as inputs for consistency with step design)
     var stageParamKeys = s.parameters ? Object.keys(s.parameters) : [];
     if (stageParamKeys.length > 0) {
@@ -811,28 +835,23 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   function buildJobHtml(job, ji) {
     var badgeCls = job.isDeployment ? 'job-badge-deploy' : 'job-badge-job';
     var badgeText = 'JOB';
-    var navAttr = '';
-    if (job.templateRef && job.resolvedPath) {
-      navAttr = ' data-nav-path="' + esc(job.resolvedPath) + '"';
-      if (job.parameters && Object.keys(job.parameters).length > 0) {
-        navAttr += " data-nav-params='" + esc(JSON.stringify(job.parameters)) + "'";
-      }
-    }
 
     var h = '<div class="job-card">';
     h += '<div class="job-header">';
     h += '<span class="job-badge ' + badgeCls + '">' + badgeText + '</span>';
     h += '<span class="job-name">' + esc(job.displayName) + '</span>';
-    if (job.templateRef && job.resolvedPath) {
-      h += '<span class="job-nav"' + navAttr + '>open &rarr;</span>';
-    }
     h += '</div>';
 
     if (job.environment) {
       h += '<div class="job-meta">Env: ' + esc(job.environment) + '</div>';
     }
     if (job.templateRef) {
-      h += '<div class="sf-tpl"><span class="sf-tpl-label">template:</span> ' + esc(job.templateRef) + '</div>';
+      var jobTplNavCls = job.resolvedPath ? ' navigable' : '';
+      var jobTplNavData = job.resolvedPath ? ' data-nav-path="' + esc(job.resolvedPath) + '"' : '';
+      if (job.resolvedPath && job.parameters && Object.keys(job.parameters).length > 0) {
+        jobTplNavData += " data-nav-params='" + esc(JSON.stringify(job.parameters)) + "'";
+      }
+      h += '<div class="sf-tpl' + jobTplNavCls + '"' + jobTplNavData + '><span class="sf-tpl-label">template:</span> ' + esc(job.templateRef) + '</div>';
     }
 
     // Job parameters (displayed as inputs for consistency with step design)
@@ -881,19 +900,11 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     var html = '';
     steps.forEach(function(step, i) {
       var isLast = (i === steps.length - 1);
-      var navAttr = '';
-      if (step.type === 'template' && step.resolvedPath) {
-        navAttr = ' data-nav-path="' + esc(step.resolvedPath) + '"';
-        // Store inputs as caller params for navigation
-        if (step.inputs && Object.keys(step.inputs).length > 0) {
-          navAttr += " data-nav-params='" + esc(JSON.stringify(step.inputs)) + "'";
-        }
-      }
       html += '<div class="step-flow-item">';
       html += '<div class="step-flow-connector"><div class="step-flow-dot dot-' + step.type + '"></div>';
       if (!isLast) html += '<div class="step-flow-line"></div>';
       html += '</div>';
-      html += '<div class="step-flow-card sf-' + step.type + '"' + navAttr + '>';
+      html += '<div class="step-flow-card sf-' + step.type + (step.childSteps && step.childSteps.length > 0 ? ' has-children' : '') + '">';
       // Consistent type label
       var stepLabel;
       var stepLabelCls;
@@ -903,22 +914,31 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
       } else if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
         stepLabel = 'TASK';
         stepLabelCls = 'sf-label-task';
+      } else if (step.type === 'powershell' || step.type === 'script' || step.type === 'bash') {
+        stepLabel = step.type === 'powershell' ? 'POWERSHELL' : step.type === 'bash' ? 'BASH' : 'SCRIPT';
+        stepLabelCls = 'sf-label-powershell';
       } else {
         stepLabel = step.type.toUpperCase();
         stepLabelCls = 'sf-label-step';
       }
       html += '<span class="sf-type-label ' + stepLabelCls + '">' + stepLabel + '</span>';
-      html += '<div class="sf-name">' + esc(step.displayName);
-      if (step.type === 'template' && step.resolvedPath) html += '<span class="sn-open">open &rarr;</span>';
-      html += '</div>';
+      html += '<div class="sf-name">' + esc(step.displayName) + '</div>';
       // Task badge with version (e.g. VSBuild@1)
       if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
         var bc = getTaskBadgeClass(step.name);
         html += '<span class="sf-task-badge ' + bc + '">' + esc(step.name) + '</span>';
-      } else if (step.type !== 'template') {
-        html += '<div class="sf-type">' + esc(step.type) + '</div>';
+      } else if (step.type === 'powershell' || step.type === 'script' || step.type === 'bash') {
+        var pbc = getTaskBadgeClass(step.name);
+        html += '<span class="sf-task-badge ' + (pbc || 'tb-powershell') + '">' + esc(step.name) + '</span>';
       }
-      if (step.templateRef) html += '<div class="sf-tpl"><span class="sf-tpl-label">template:</span> ' + esc(step.templateRef) + '</div>';
+      if (step.templateRef) {
+        var stepTplNavCls = step.resolvedPath ? ' navigable' : '';
+        var stepTplNavData = step.resolvedPath ? ' data-nav-path="' + esc(step.resolvedPath) + '"' : '';
+        if (step.resolvedPath && step.inputs && Object.keys(step.inputs).length > 0) {
+          stepTplNavData += " data-nav-params='" + esc(JSON.stringify(step.inputs)) + "'";
+        }
+        html += '<div class="sf-tpl' + stepTplNavCls + '"' + stepTplNavData + '><span class="sf-tpl-label">template:</span> ' + esc(step.templateRef) + '</div>';
+      }
       // Condition
       if (step.condition) {
         html += '<div class="sf-condition">' + esc(step.condition) + '</div>';
@@ -949,9 +969,11 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
         html += '</div></div>';
       }
 
-      // Child steps rendered INSIDE the step card for visual containment
-      if (step.childSteps && step.childSteps.length > 0)
+      // Child steps rendered INSIDE the step card (collapsed by default)
+      if (step.childSteps && step.childSteps.length > 0) {
+        html += '<div class="sf-child-footer">' + step.childSteps.length + ' task(s)</div>';
         html += '<div class="child-flow">' + renderStepFlow(step.childSteps) + '</div>';
+      }
       html += '</div></div>';
     });
     return html;
@@ -1004,6 +1026,20 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 
   // -- Wire click events (delegate on canvas) --
   canvas.addEventListener('click', function(e) {
+    // Step card with children toggle (whole card is clickable)
+    var stepCard = e.target.closest('.step-flow-card.has-children');
+    if (stepCard) {
+      // Don't toggle if clicking interactive sub-elements
+      if (e.target.closest('[data-toggle-inputs]') || e.target.closest('.sf-inputs-list')
+        || e.target.closest('[data-nav-path]') || e.target.closest('[data-toggle-script]')) {
+        // fall through to other handlers
+      } else {
+        e.stopPropagation();
+        stepCard.classList.toggle('expanded');
+        relayout();
+        return;
+      }
+    }
     // Inputs toggle
     var toggle = e.target.closest('[data-toggle-inputs]');
     if (toggle) {
@@ -1089,6 +1125,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     canvas.querySelectorAll('.job-card').forEach(function(jc) {
       jc.classList.add('expanded');
     });
+    // Expand all child step flows
+    canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) {
+      cf.classList.add('expanded');
+    });
     // Expand header params grid
     var hpGrid = document.querySelector('.header-params-grid');
     if (hpGrid) hpGrid.classList.remove('collapsed');
@@ -1108,6 +1148,10 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
     // Collapse all job cards
     canvas.querySelectorAll('.job-card').forEach(function(jc) {
       jc.classList.remove('expanded');
+    });
+    // Collapse all child step flows
+    canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) {
+      cf.classList.remove('expanded');
     });
     // Collapse header params grid
     var hpGrid = document.querySelector('.header-params-grid');

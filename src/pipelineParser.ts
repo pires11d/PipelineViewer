@@ -1046,7 +1046,7 @@ export class PipelineParser {
     if (combined.includes('validat') || combined.includes('alert')) { return 'validate'; }
     if (combined.includes('test')) { return 'test'; }
     if (combined.includes('detect') || combined.includes('determine') || combined.includes('extract')) { return 'detect'; }
-    if (combined.includes('synchroniz') || combined.includes('backfill') || combined.includes('drift') || combined.includes('sync')) { return 'sync'; }
+    if (combined.includes('sync') || combined.includes('drift') || combined.includes('backfill')) { return 'sync'; }
     return 'generic';
   }
 

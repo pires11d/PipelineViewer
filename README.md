@@ -81,7 +81,7 @@ Stages are automatically classified by name and display name keywords, then colo
 | ![Deploy](https://img.shields.io/badge/-81c784?style=flat-square) | Deploy | `deploy`, `sign` |
 | ![Validate](https://img.shields.io/badge/-ffb74d?style=flat-square) | Validate | `validat`, `alert` |
 | ![Detect](https://img.shields.io/badge/-ff7043?style=flat-square) | Detect | `detect`, `determine`, `extract` |
-| ![Sync](https://img.shields.io/badge/-a177e9?style=flat-square) | Sync | `synchroniz`, `backfill`, `drift`, `sync` |
+| ![Sync](https://img.shields.io/badge/-a177e9?style=flat-square) | Sync | `sync`, `drift`, `backfill` |
 | ![Test](https://img.shields.io/badge/-f06292?style=flat-square) | Test | `test` |
 | ![NuGet](https://img.shields.io/badge/-ffca28?style=flat-square) | NuGet | `nuget` |
 | ![Database](https://img.shields.io/badge/-388e3c?style=flat-square) | Database | `database` |

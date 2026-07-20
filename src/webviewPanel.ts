@@ -21,7 +21,7 @@ export class PipelineViewerPanel {
 
     const panel = vscode.window.createWebviewPanel(
       PipelineViewerPanel.viewType,
-      `Pipeline: ${model.fileName}`,
+      `Diagram: ${model.fileName}`,
       column,
       { enableScripts: true, retainContextWhenHidden: true }
     );
@@ -70,7 +70,7 @@ export class PipelineViewerPanel {
           }
           const newPanel = vscode.window.createWebviewPanel(
             'adoPipelineViewer',
-            `Pipeline: ${newModel.fileName}`,
+            `Diagram: ${newModel.fileName}`,
             vscode.ViewColumn.Active,
             { enableScripts: true, retainContextWhenHidden: true }
           );
@@ -87,7 +87,7 @@ export class PipelineViewerPanel {
   }
 
   private update(model: PipelineModel) {
-    this.panel.title = `Pipeline: ${model.fileName}`;
+    this.panel.title = `Diagram: ${model.fileName}`;
     this.panel.webview.html = this.getHtml(model);
   }
 

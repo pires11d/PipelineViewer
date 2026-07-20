@@ -2,12 +2,27 @@
   "name": "azure-pipeline-viewer",
   "displayName": "Azure DevOps YAML Pipeline Viewer",
   "description": "Visualize Azure DevOps YAML pipelines as flowcharts with full template resolution",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "publisher": "pires11d",
   "icon": "icon.png",
-  "engines": { "vscode": "^1.80.0" },
-  "categories": ["Visualization", "Other"],
-  "keywords": ["azure", "devops", "pipeline", "yaml", "yml", "flowchart", "template", "visualization", "ADO"],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "azure",
+    "devops",
+    "pipeline",
+    "yaml",
+    "yml",
+    "flowchart",
+    "template",
+    "visualization",
+    "ADO"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/pires11d/PipelineViewer"
@@ -54,7 +69,11 @@
         "adoPipelineViewer.theme": {
           "type": "string",
           "default": "system",
-          "enum": ["system", "dark", "light"],
+          "enum": [
+            "system",
+            "dark",
+            "light"
+          ],
           "description": "Color theme for the pipeline diagram. Applies globally to all panels."
         }
       }
@@ -66,8 +85,9 @@
     "package": "npx vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.0",
+    "@types/vscode": "^1.80.0",
     "esbuild": "^0.20.0",
     "typescript": "^5.3.0"
   },

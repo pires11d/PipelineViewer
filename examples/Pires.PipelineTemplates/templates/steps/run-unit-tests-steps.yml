@@ -1,0 +1,20 @@
+# Unit test steps (SYNTHETIC DEMO)
+parameters:
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+
+steps:
+  - task: DotNetCoreCLI@2
+    displayName: 'Run unit tests'
+    inputs:
+      command: 'test'
+      projects: '**/*Tests.csproj'
+      arguments: '--configuration ${{ parameters.buildConfiguration }} --collect "XPlat Code Coverage"'
+
+  - task: PublishTestResults@2
+    displayName: 'Publish test results'
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: '**/*.trx'
+    continueOnError: true

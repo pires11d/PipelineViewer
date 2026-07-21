@@ -1,0 +1,22 @@
+# Restore & build steps (SYNTHETIC DEMO)
+parameters:
+  - name: solution
+    type: string
+    default: '**/*.sln'
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+
+steps:
+  - task: NuGetCommand@2
+    displayName: 'Restore NuGet packages'
+    inputs:
+      command: 'restore'
+      restoreSolution: ${{ parameters.solution }}
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build solution'
+    inputs:
+      command: 'build'
+      projects: ${{ parameters.solution }}
+      arguments: '--configuration ${{ parameters.buildConfiguration }} --no-restore'

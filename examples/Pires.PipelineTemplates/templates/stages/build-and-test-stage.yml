@@ -1,0 +1,39 @@
+# Build & Test stage (SYNTHETIC DEMO)
+# Restores, builds, unit-tests and publishes the deployable artifact.
+parameters:
+  - name: stageName
+    type: string
+    default: BuildAndTest
+  - name: serviceName
+    type: string
+  - name: solution
+    type: string
+    default: '**/*.sln'
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+
+stages:
+  - stage: ${{ parameters.stageName }}
+    displayName: 'Build & Test'
+    variables:
+      - group: pires-shared
+    jobs:
+      - job: BuildJob
+        displayName: 'Restore, Build & Unit Test'
+        steps:
+          - checkout: self
+
+          - template: ../steps/restore-and-build-steps.yml
+            parameters:
+              solution: ${{ parameters.solution }}
+              buildConfiguration: ${{ parameters.buildConfiguration }}
+
+          - template: ../steps/run-unit-tests-steps.yml
+            parameters:
+              buildConfiguration: ${{ parameters.buildConfiguration }}
+
+          - template: ../steps/publish-artifact-steps.yml
+            parameters:
+              serviceName: ${{ parameters.serviceName }}
+              buildConfiguration: ${{ parameters.buildConfiguration }}

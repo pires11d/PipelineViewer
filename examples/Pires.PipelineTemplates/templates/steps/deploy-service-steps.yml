@@ -1,0 +1,37 @@
+# Deploy service steps (SYNTHETIC DEMO)
+parameters:
+  - name: serviceName
+    type: string
+  - name: environmentName
+    type: string
+  - name: releaseChannel
+    type: string
+    default: 'stable'
+
+steps:
+  - task: DownloadBuildArtifacts@1
+    displayName: 'Download build artifact'
+    inputs:
+      artifactName: 'drop'
+      downloadPath: '$(System.ArtifactsDirectory)'
+
+  - task: PowerShell@2
+    displayName: 'Stop ${{ parameters.serviceName }}'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Stopping ${{ parameters.serviceName }} on ${{ parameters.environmentName }}"
+
+  - task: PowerShell@2
+    displayName: 'Deploy ${{ parameters.serviceName }} (${{ parameters.releaseChannel }})'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Deploying ${{ parameters.serviceName }} to ${{ parameters.environmentName }} on the ${{ parameters.releaseChannel }} channel"
+
+  - task: PowerShell@2
+    displayName: 'Start ${{ parameters.serviceName }}'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Starting ${{ parameters.serviceName }}"

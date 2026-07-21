@@ -1,0 +1,46 @@
+# Deploy-to-environment stage (SYNTHETIC DEMO)
+# Shared by every environment template. Downloads the artifact, deploys the
+# service and runs a smoke test. Uses a deployment job so it shows up as an
+# environment-bound stage.
+parameters:
+  - name: environmentName
+    type: string
+  - name: serviceName
+    type: string
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+  - name: releaseChannel
+    type: string
+    default: 'stable'
+  - name: dependsOnStage
+    type: string
+    default: BuildAndTest
+  - name: requireApproval
+    type: boolean
+    default: false
+
+stages:
+  - stage: Deploy_${{ parameters.environmentName }}
+    displayName: 'Deploy to ${{ parameters.environmentName }}'
+    dependsOn:
+      - ${{ parameters.dependsOnStage }}
+    variables:
+      - group: pires-${{ parameters.environmentName }}
+    jobs:
+      - deployment: DeployJob
+        displayName: 'Deploy ${{ parameters.serviceName }} to ${{ parameters.environmentName }}'
+        environment: ${{ parameters.environmentName }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: ../steps/deploy-service-steps.yml
+                  parameters:
+                    serviceName: ${{ parameters.serviceName }}
+                    environmentName: ${{ parameters.environmentName }}
+                    releaseChannel: ${{ parameters.releaseChannel }}
+                - template: ../steps/smoke-test-steps.yml
+                  parameters:
+                    serviceName: ${{ parameters.serviceName }}
+                    environmentName: ${{ parameters.environmentName }}

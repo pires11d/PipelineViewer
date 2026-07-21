@@ -7,6 +7,36 @@ export function getScript(): string {
   var zoom = 1;
   var expandedStages = {};
 
+  // Inspector buttons (Parameters / Variables / Skipped) light up when they
+  // have content and go dim+disabled when empty. The button's 'is-open' class
+  // is the source of truth for whether its panel is showing, preserved across
+  // re-renders.
+  function setInspector(btnId, hasContent) {
+    var b = document.getElementById(btnId);
+    if (!b) return;
+    b.disabled = !hasContent;
+    b.classList.toggle('has-content', hasContent);
+    if (!hasContent) { b.classList.remove('is-open'); }
+  }
+  function inspectorOpen(btnId) {
+    var b = document.getElementById(btnId);
+    return !!(b && b.classList.contains('is-open'));
+  }
+
+  // -- Interactive parameter state --
+  // CONTROLS: the pipeline's own declared parameters (user-adjustable).
+  // PARAM_VALUES: current effective values keyed by the names used in conditions.
+  var CONTROLS = MODEL.controls || [];
+  var PARAM_VALUES = Object.assign({}, MODEL.paramValues || {});
+  var INTERACTIVE = MODEL.templateType === 'pipeline' && CONTROLS.length > 0;
+  // Restore saved picker values ONLY for the same file. The panel is reused
+  // across pipelines (createOrShow -> update), so unscoped state would leak one
+  // pipeline's parameter values into another and mis-evaluate its conditions.
+  var _st = vscode.getState() || {};
+  if (_st.paramValues && _st.paramValuesFile === MODEL.filePath) {
+    PARAM_VALUES = Object.assign(PARAM_VALUES, _st.paramValues);
+  }
+
   function esc(s) {
     if (s === null || s === undefined) return '';
     var d = document.createElement('div');
@@ -20,40 +50,36 @@ export function getScript(): string {
     return s.replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
   }
 
+  function persistParams() {
+    vscode.setState(Object.assign({}, vscode.getState() || {}, {
+      paramValues: PARAM_VALUES,
+      paramValuesFile: MODEL.filePath
+    }));
+  }
+
   // -- Header --
   var header = document.getElementById('header');
   var hasName = MODEL.name && MODEL.name !== 'Unnamed Pipeline';
   var metaItems = '';
+  var totalJobs = 0, totalSteps = 0;
+  MODEL.stages.forEach(function(s) {
+    if (!s.jobs) return;
+    totalJobs += s.jobs.length;
+    s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
+  });
   if (MODEL.templateType === 'pipeline') {
     metaItems = '<span><span class="label">Trigger:</span> ' + esc(MODEL.trigger) + '</span>'
       + '<span><span class="label">PR:</span> ' + esc(MODEL.pr) + '</span>'
       + '<span><span class="label">Pool:</span> ' + esc(MODEL.pool) + '</span>'
       + '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>';
   } else if (MODEL.templateType === 'pipelineTemplate' || MODEL.templateType === 'stages') {
-    var totalJobs = 0, totalSteps = 0;
-    MODEL.stages.forEach(function(s) {
-      if (!s.jobs) return;
-      totalJobs += s.jobs.length;
-      s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
-    });
     metaItems = '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>'
       + '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
       + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
   } else if (MODEL.templateType === 'jobs') {
-    var totalJobs = 0, totalSteps = 0;
-    MODEL.stages.forEach(function(s) {
-      if (!s.jobs) return;
-      totalJobs += s.jobs.length;
-      s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
-    });
     metaItems = '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
       + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
   } else {
-    var totalSteps = 0;
-    MODEL.stages.forEach(function(s) {
-      if (!s.jobs) return;
-      s.jobs.forEach(function(j) { totalSteps += (j.steps ? j.steps.length : 0); });
-    });
     metaItems = '<span><span class="label">Steps:</span> ' + totalSteps + '</span>';
   }
   var typeLabels = { pipeline: 'PIPELINE', pipelineTemplate: 'PIPELINE TEMPLATE', stages: 'STAGE TEMPLATE', jobs: 'JOB TEMPLATE', steps: 'STEP TEMPLATE' };
@@ -71,8 +97,10 @@ export function getScript(): string {
     + (hasName ? '<div class="pipeline-name">' + esc(MODEL.name) + '</div>' : '')
     + '<div class="meta">' + metaItems + '</div>';
 
-  // Show caller params if present
-  if (MODEL.callerParams && Object.keys(MODEL.callerParams).length > 0) {
+  // Show caller params if present -- but not for pipelines that have the
+  // interactive Parameters inspector (would be redundant). Kept for navigated
+  // templates, where it shows what the caller passed in.
+  if (!INTERACTIVE && MODEL.callerParams && Object.keys(MODEL.callerParams).length > 0) {
     var paramKeys = Object.keys(MODEL.callerParams);
     var paramsHtml = '<div class="header-params">';
     paramsHtml += '<div class="header-params-toggle" data-toggle-header-params="1">';
@@ -92,18 +120,80 @@ export function getScript(): string {
     header.innerHTML += paramsHtml;
   }
 
-  // -- Layout --
-  // Remove skipped stages entirely from display to avoid duplicate-name collisions
-  var stages = MODEL.stages.filter(function(s) { return !s.skipped; });
-  // Deduplicate stages with identical names (e.g. from opposing conditional branches)
-  var seenNames = {};
-  stages = stages.filter(function(s) {
-    if (seenNames[s.name]) return false;
-    seenNames[s.name] = true;
-    return true;
-  });
-  var stageMap = {};
-  stages.forEach(function(s) { stageMap[s.name] = s; });
+  // -- Condition evaluator (client mirror of the parser's tryEvalCondition) --
+  // Lets the parameter picker recompute which stages run without a round-trip.
+  function splitTopLevelArgs(text) {
+    var parts = [], depth = 0, start = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] === '(') depth++;
+      else if (text[i] === ')') depth--;
+      else if (text[i] === ',' && depth === 0) { parts.push(text.substring(start, i)); start = i + 1; }
+    }
+    parts.push(text.substring(start));
+    return parts;
+  }
+
+  // Returns true / false / null (null = cannot evaluate; treat as "shown").
+  function evalCondition(expr, values) {
+    if (!expr) return null;
+    var andMatch = expr.match(/^if\\s+and\\((.+)\\)$/);
+    if (andMatch) {
+      var ar = splitTopLevelArgs(andMatch[1]).map(function(p) { return evalCondition('if ' + p.trim(), values); });
+      if (ar.some(function(r) { return r === false; })) return false;
+      if (ar.some(function(r) { return r === null; })) return null;
+      return true;
+    }
+    var orMatch = expr.match(/^if\\s+or\\((.+)\\)$/);
+    if (orMatch) {
+      var or = splitTopLevelArgs(orMatch[1]).map(function(p) { return evalCondition('if ' + p.trim(), values); });
+      if (or.some(function(r) { return r === true; })) return true;
+      if (or.some(function(r) { return r === null; })) return null;
+      return false;
+    }
+    var m = expr.match(/^if\\s+(eq|ne)\\s*\\(\\s*parameters\\.(\\w+)\\s*,\\s*(.+?)\\s*\\)$/);
+    if (!m) return null;
+    var op = m[1], name = m[2], rawVal = m[3];
+    if (!(name in values)) return null;
+    var expected = rawVal;
+    if (expected === 'true') expected = true;
+    else if (expected === 'false') expected = false;
+    else if (/^'.*'$/.test(expected)) expected = expected.slice(1, -1);
+    else if (/^".*"$/.test(expected)) expected = expected.slice(1, -1);
+    var isEqual = String(values[name]) === String(expected);
+    return op === 'eq' ? isEqual : !isEqual;
+  }
+
+  // Parameter names referenced by an expression (for the "why skipped" reason).
+  function paramsInExpr(expr) {
+    var names = [], seen = {}, re = /parameters\\.(\\w+)/g, m;
+    while ((m = re.exec(expr || '')) !== null) {
+      if (!seen[m[1]]) { seen[m[1]] = true; names.push(m[1]); }
+    }
+    return names;
+  }
+
+  // Decide whether a stage is skipped under the current parameter values.
+  function computeSkip(s) {
+    if (INTERACTIVE && s.conditionalExpr) {
+      var r = evalCondition(s.conditionalExpr, PARAM_VALUES);
+      if (r === false) return true;
+      if (r === true) return false;
+    }
+    return !!s.skipped;
+  }
+
+  // Human-readable reason a stage was skipped (the deciding param values).
+  function explainSkip(s) {
+    var parts = [];
+    paramsInExpr(s.conditionalExpr).forEach(function(n) {
+      if (n in PARAM_VALUES) parts.push(n + ' = ' + String(PARAM_VALUES[n]));
+    });
+    return parts.join(', ');
+  }
+
+  // -- Layout state (rebuilt on every render) --
+  var stages = [], stageMap = {}, lo = null, nodePositions = {};
+  var NODE_W = 280, NODE_W_EXP = 460, H_GAP = 80, V_GAP = 50, PAD = 40;
 
   function computeLayers() {
     var layers = {}, vis = {};
@@ -112,14 +202,10 @@ export function getScript(): string {
       vis[name] = true;
       var s = stageMap[name];
       if (!s) { layers[name] = 0; return 0; }
-      // Filter to only resolved dependencies (skip unresolved parameter refs and missing stages)
-      // Also skip dependencies on skipped stages -- use the skipped stage's own deps instead
       var resolvedDeps = getEffectiveDeps(s);
       if (resolvedDeps.length === 0) { layers[name] = 0; return 0; }
       var mx = 0;
-      resolvedDeps.forEach(function(dep) {
-        mx = Math.max(mx, getLayer(dep) + 1);
-      });
+      resolvedDeps.forEach(function(dep) { mx = Math.max(mx, getLayer(dep) + 1); });
       layers[name] = mx; return mx;
     }
 
@@ -132,7 +218,6 @@ export function getScript(): string {
       for (var i = 0; i < direct.length; i++) {
         var dep = stageMap[direct[i]];
         if (dep && dep.skipped) {
-          // Collapse through skipped stage: use its deps instead
           var collapsed = getEffectiveDeps(dep);
           for (var j = 0; j < collapsed.length; j++) {
             if (result.indexOf(collapsed[j]) === -1) result.push(collapsed[j]);
@@ -146,13 +231,10 @@ export function getScript(): string {
 
     stages.forEach(function(s) { getLayer(s.name); });
 
-    // Second pass: stages with ALL unresolved deps that got layer 0
-    // should be placed after the nearest preceding stage in document order
     stages.forEach(function(s, idx) {
       if (idx === 0) return;
       var hasDeps = s.dependsOn && s.dependsOn.length > 0;
       var resolvedDeps = hasDeps ? getEffectiveDeps(s) : [];
-      // If stage has deps but none resolved, place it after the highest-layer predecessor
       if (hasDeps && resolvedDeps.length === 0 && (layers[s.name] || 0) === 0) {
         var bestLayer = 0;
         for (var j = idx - 1; j >= 0; j--) {
@@ -168,23 +250,10 @@ export function getScript(): string {
       groups[layer].push(s);
       maxLayer = Math.max(maxLayer, layer);
     });
-    // Sort each column: enabled stages first, skipped stages at bottom
-    for (var k in groups) {
-      groups[k].sort(function(a, b) {
-        if (a.skipped && !b.skipped) return 1;
-        if (!a.skipped && b.skipped) return -1;
-        return 0;
-      });
-    }
     return { layers: layers, groups: groups, maxLayer: maxLayer };
   }
 
-  var lo = computeLayers();
-  var NODE_W = 280, NODE_W_EXP = 460, H_GAP = 80, V_GAP = 50, PAD = 40;
-  var nodePositions = {};
-
-  // -- Build stage nodes --
-  // Humanize unresolved parameter expressions for display
+  // -- Humanize unresolved parameter expressions for display --
   function humanize(text) {
     if (!text) return '(unnamed)';
     return text.replace(/\\$\\{\\{\\s*parameters\\.(\\w+)\\s*\\}\\}/g, function(_, k) {
@@ -192,8 +261,7 @@ export function getScript(): string {
     });
   }
 
-  // Derive a readable name from the filename when stage name/displayName are unresolved params.
-  // e.g. "backend-backfill-deploy-stage.yml" -> "Backend Backfill Deploy"
+  // Derive a readable name from the filename when name/displayName are unresolved.
   function filenameFallback() {
     var base = MODEL.fileName
       .replace(/\\.(yml|yaml)$/i, '')
@@ -203,17 +271,17 @@ export function getScript(): string {
     }).join(' ');
   }
 
+  function stageTitle(s) {
+    var title = humanize(s.displayName || s.name || '(unnamed)');
+    if (/^\\([^)]+\\)$/.test(title) || title === '(unnamed)') title = filenameFallback();
+    return title;
+  }
+
   function buildStageHtml(s) {
-    var title = s.displayName || s.name || '(unnamed)';
-    title = humanize(title);
-    // When entirely unresolved (all params, no defaults), fall back to filename
-    if (/^\\([^)]+\\)$/.test(title) || title === '(unnamed)') {
-      title = filenameFallback();
-    }
     var h = '<div class="sn-header">';
     h += '<span class="sn-badge badge-stage">STAGE</span> ';
     h += '<span class="sn-tag badge-' + s.type + '">' + s.type.toUpperCase() + '</span>';
-    h += '<span class="sn-title">' + esc(title) + '</span>';
+    h += '<span class="sn-title">' + esc(stageTitle(s)) + '</span>';
     h += '</div>';
     if (s.isConditional && s.conditionalExpr)
       h += '<div class="cond-label">if: ' + esc(s.conditionalExpr) + '</div>';
@@ -225,7 +293,6 @@ export function getScript(): string {
       }
       h += '<div class="sf-tpl' + tplNavCls + '"' + tplNavData + '><span class="sf-tpl-label">template:</span> ' + esc(s.templateRef) + '</div>';
     }
-    // Stage parameters (displayed as inputs for consistency with step design)
     var stageParamKeys = s.parameters ? Object.keys(s.parameters) : [];
     if (stageParamKeys.length > 0) {
       h += '<div class="sf-inputs stage-params">';
@@ -245,7 +312,6 @@ export function getScript(): string {
       + stageJobs.reduce(function(sum, j) { return sum + (j.steps ? j.steps.length : 0); }, 0)
       + ' step(s)</div>';
 
-    // Inner content (visible when expanded)
     h += '<div class="stage-inner">';
     if (!s.jobs || s.jobs.length === 0) {
       h += '<div style="opacity:0.4;padding:10px;text-align:center;font-size:11px">No jobs resolved</div>';
@@ -279,7 +345,6 @@ export function getScript(): string {
       h += '<div class="sf-tpl' + jobTplNavCls + '"' + jobTplNavData + '><span class="sf-tpl-label">template:</span> ' + esc(job.templateRef) + '</div>';
     }
 
-    // Job parameters (displayed as inputs for consistency with step design)
     var jobParamKeys = job.parameters ? Object.keys(job.parameters) : [];
     if (jobParamKeys.length > 0) {
       h += '<div class="sf-inputs job-params">';
@@ -295,7 +360,6 @@ export function getScript(): string {
       h += '</div></div>';
     }
 
-    // Job footer (visible when collapsed)
     var stepCount = job.steps ? job.steps.length : 0;
     h += '<div class="job-footer">' + stepCount + ' step(s)</div>';
 
@@ -330,7 +394,6 @@ export function getScript(): string {
       if (!isLast) html += '<div class="step-flow-line"></div>';
       html += '</div>';
       html += '<div class="step-flow-card sf-' + step.type + (step.childSteps && step.childSteps.length > 0 ? ' has-children' : '') + '">';
-      // Consistent type label
       var stepLabel;
       var stepLabelCls;
       if (step.type === 'template' || step.type === 'checkout') {
@@ -348,7 +411,6 @@ export function getScript(): string {
       }
       html += '<span class="sf-type-label ' + stepLabelCls + '">' + stepLabel + '</span>';
       html += '<div class="sf-name">' + esc(step.displayName) + '</div>';
-      // Task badge with version (e.g. VSBuild@1)
       if (step.type === 'task' || step.type === 'cmd' || step.type === 'sonarqube') {
         var bc = getTaskBadgeClass(step.name);
         html += '<span class="sf-task-badge ' + bc + '">' + esc(step.name) + '</span>';
@@ -364,15 +426,12 @@ export function getScript(): string {
         }
         html += '<div class="sf-tpl' + stepTplNavCls + '"' + stepTplNavData + '><span class="sf-tpl-label">template:</span> ' + esc(step.templateRef) + '</div>';
       }
-      // Condition
       if (step.condition) {
         html += '<div class="sf-condition">' + esc(step.condition) + '</div>';
       }
-      // ContinueOnError
       if (step.continueOnError) {
         html += '<div class="sf-continue">continueOnError: true</div>';
       }
-      // Inputs
       var inputKeys = step.inputs ? Object.keys(step.inputs) : [];
       if (inputKeys.length > 0) {
         html += '<div class="sf-inputs">';
@@ -393,8 +452,6 @@ export function getScript(): string {
         });
         html += '</div></div>';
       }
-
-      // Child steps rendered INSIDE the step card (collapsed by default)
       if (step.childSteps && step.childSteps.length > 0) {
         html += '<div class="sf-child-footer">' + step.childSteps.length + ' task(s)</div>';
         html += '<div class="child-flow">' + renderStepFlow(step.childSteps) + '</div>';
@@ -404,57 +461,308 @@ export function getScript(): string {
     return html;
   }
 
-  // -- Render based on template type --
-  var directSteps = (MODEL.templateType === 'steps' && stages.length === 1
-    && stages[0].jobs && stages[0].jobs.length === 1
-    && stages[0].jobs[0].steps);
-  var directJobs = (MODEL.templateType === 'jobs' && stages.length === 1
-    && stages[0].jobs && stages[0].jobs.length > 0);
+  // -- Classify stages under current params, then (re)build the diagram --
+  function classifyAndBuild() {
+    var skipped = [], seen = {};
+    stages = [];
+    MODEL.stages.forEach(function(s) {
+      // Reflect the current skip decision so getEffectiveDeps can collapse it
+      s.skipped = computeSkip(s);
+      if (s.skipped) { skipped.push(s); return; }
+      if (seen[s.name]) return; // dedup identically-named active stages
+      seen[s.name] = true;
+      stages.push(s);
+    });
+    stageMap = {};
+    stages.forEach(function(s) { stageMap[s.name] = s; });
+    lo = computeLayers();
+    nodePositions = {};
+    canvas.innerHTML = '';
 
-  if (directSteps) {
-    // Step template: render steps directly without stage/job wrapper
-    var stepContainer = document.createElement('div');
-    stepContainer.className = 'direct-steps';
-    stepContainer.innerHTML = renderStepFlow(stages[0].jobs[0].steps);
-    canvas.appendChild(stepContainer);
-    canvas.style.padding = '20px';
-  } else if (directJobs) {
-    // Job template: render jobs directly without stage wrapper
-    var jobContainer = document.createElement('div');
-    jobContainer.className = 'direct-jobs';
-    stages[0].jobs.forEach(function(job, ji) {
-      jobContainer.innerHTML += buildJobHtml(job, ji);
-    });
-    canvas.appendChild(jobContainer);
-    canvas.style.padding = '20px';
-  } else {
-  // -- Render all stage nodes --
-  for (var col = 0; col <= lo.maxLayer; col++) {
-    var cs = lo.groups[col] || [];
-    var x = PAD + col * (NODE_W + H_GAP);
-    cs.forEach(function(s, ri) {
-      var y = PAD + ri * 120;
-      nodePositions[s.name] = { x: x, y: y, w: NODE_W, h: 70 };
-      var div = document.createElement('div');
-      div.className = 'stage-node type-' + s.type;
-      if (s.isConditional) div.classList.add('conditional');
-      if (!s.templateResolved && s.templateRef) div.classList.add('unresolved');
-      if (s.skipped) div.classList.add('skipped');
-      div.style.left = x + 'px';
-      div.style.top = y + 'px';
-      div.setAttribute('data-stage', s.name);
-      div.innerHTML = buildStageHtml(s);
-      canvas.appendChild(div);
-    });
+    var directSteps = (MODEL.templateType === 'steps' && stages.length === 1
+      && stages[0].jobs && stages[0].jobs.length === 1
+      && stages[0].jobs[0].steps);
+    var directJobs = (MODEL.templateType === 'jobs' && stages.length === 1
+      && stages[0].jobs && stages[0].jobs.length > 0);
+
+    if (directSteps) {
+      var stepContainer = document.createElement('div');
+      stepContainer.className = 'direct-steps';
+      stepContainer.innerHTML = renderStepFlow(stages[0].jobs[0].steps);
+      canvas.appendChild(stepContainer);
+      canvas.style.padding = '20px';
+    } else if (directJobs) {
+      var jobContainer = document.createElement('div');
+      jobContainer.className = 'direct-jobs';
+      stages[0].jobs.forEach(function(job, ji) {
+        jobContainer.innerHTML += buildJobHtml(job, ji);
+      });
+      canvas.appendChild(jobContainer);
+      canvas.style.padding = '20px';
+    } else {
+      canvas.style.padding = '';
+      for (var col = 0; col <= lo.maxLayer; col++) {
+        var cs = lo.groups[col] || [];
+        var x = PAD + col * (NODE_W + H_GAP);
+        cs.forEach(function(s, ri) {
+          var y = PAD + ri * 120;
+          nodePositions[s.name] = { x: x, y: y, w: NODE_W, h: 70 };
+          var div = document.createElement('div');
+          div.className = 'stage-node type-' + s.type;
+          if (s.isConditional) div.classList.add('conditional');
+          if (!s.templateResolved && s.templateRef) div.classList.add('unresolved');
+          if (expandedStages[s.name]) div.classList.add('expanded');
+          div.style.left = x + 'px';
+          div.style.top = y + 'px';
+          div.setAttribute('data-stage', s.name);
+          div.innerHTML = buildStageHtml(s);
+          canvas.appendChild(div);
+        });
+      }
+    }
+
+    renderExcluded(skipped);
+    relayout();
   }
-  } // end else (stage rendering)
+
+  // -- Skipped stages panel (feature: "why is this stage not running?") --
+  function renderExcluded(skipped) {
+    var panel = document.getElementById('skipped-panel');
+    if (!panel) return;
+    var hasContent = skipped && skipped.length > 0;
+    setInspector('btnExcluded', hasContent);
+    if (!hasContent) {
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
+      return;
+    }
+    var h = '<div class="skipped-title">Skipped stages (' + skipped.length + ')'
+      + '<span class="skipped-hint">not run under the current parameters</span></div>';
+    h += '<div class="skipped-list">';
+    skipped.forEach(function(s) {
+      var reason = explainSkip(s);
+      h += '<div class="skipped-item">';
+      h += '<span class="skipped-name">' + esc(stageTitle(s)) + '</span>';
+      if (s.conditionalExpr) h += '<span class="skipped-expr">if: ' + esc(s.conditionalExpr) + '</span>';
+      if (reason) h += '<span class="skipped-reason">' + esc(reason) + '</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+    panel.innerHTML = h;
+    // Preserve whatever open/closed state the button reflects (closed initially).
+    panel.classList.toggle('hidden', !inspectorOpen('btnExcluded'));
+  }
+
+  // -- Parameter picker panel (feature: toggle params, preview live) --
+  function renderParamPanel() {
+    var panel = document.getElementById('param-panel');
+    if (!panel) return;
+    if (!INTERACTIVE) {
+      panel.classList.add('hidden');
+      setInspector('btnParams', false);
+      return;
+    }
+    setInspector('btnParams', true);
+
+    var h = '<div class="pp-title">Run parameters <span class="pp-hint">adjust to preview which stages run</span></div>';
+    h += '<div class="pp-grid">';
+    CONTROLS.forEach(function(c, i) {
+      var cur = (c.name in PARAM_VALUES) ? PARAM_VALUES[c.name] : c.value;
+      var id = 'pp_' + i;
+      h += '<div class="pp-item">';
+      h += '<label class="pp-label" for="' + id + '">' + esc(c.displayName || c.name) + '</label>';
+      if (c.type === 'boolean') {
+        h += '<input type="checkbox" class="pp-input" id="' + id + '" data-pname="' + esc(c.name) + '" data-ptype="boolean"' + (cur === true ? ' checked' : '') + '>';
+      } else if (c.values && c.values.length > 0) {
+        h += '<select class="pp-input" id="' + id + '" data-pname="' + esc(c.name) + '" data-ptype="' + esc(c.type) + '">';
+        c.values.forEach(function(v) {
+          h += '<option value="' + esc(v) + '"' + (String(cur) === String(v) ? ' selected' : '') + '>' + esc(v) + '</option>';
+        });
+        h += '</select>';
+      } else {
+        h += '<input type="text" class="pp-input" id="' + id + '" data-pname="' + esc(c.name) + '" data-ptype="' + esc(c.type) + '" value="' + esc(String(cur)) + '">';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '<div class="pp-actions"><button id="btnParamReset" class="pp-reset">Reset to defaults</button></div>';
+    panel.innerHTML = h;
+    // Preserve open/closed state across rebuilds (starts closed).
+    panel.classList.toggle('hidden', !inspectorOpen('btnParams'));
+
+    panel.querySelectorAll('.pp-input').forEach(function(el) {
+      el.addEventListener('change', function() {
+        var name = el.getAttribute('data-pname');
+        var ptype = el.getAttribute('data-ptype');
+        var val;
+        if (ptype === 'boolean') { val = el.checked; }
+        else if (ptype === 'number') { var n = Number(el.value); val = isNaN(n) ? el.value : n; }
+        else { val = el.value; }
+        PARAM_VALUES[name] = val;
+        persistParams();
+        classifyAndBuild();
+      });
+    });
+    var resetBtn = document.getElementById('btnParamReset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function() {
+        CONTROLS.forEach(function(c) { PARAM_VALUES[c.name] = c.value; });
+        persistParams();
+        renderParamPanel();
+        classifyAndBuild();
+      });
+    }
+  }
+
+  // -- Variables panel (variable groups + inline variables) --
+  function renderVarsPanel() {
+    var panel = document.getElementById('vars-panel');
+    if (!panel) return;
+    var groups = MODEL.variableGroups || [];
+    var vars = MODEL.variables || [];
+    if (groups.length === 0 && vars.length === 0) {
+      setInspector('btnVariables', false);
+      return;
+    }
+    setInspector('btnVariables', true);
+    var h = '';
+    if (groups.length > 0) {
+      h += '<div class="vp-section">';
+      h += '<div class="vp-title">Variable groups (' + groups.length + ')';
+      h += '<span class="vp-hint">must exist in the target ADO project (Pipelines &#8250; Library)</span></div>';
+      h += '<div class="vp-groups">';
+      groups.forEach(function(g) { h += '<span class="vp-group">' + esc(g) + '</span>'; });
+      h += '</div></div>';
+    }
+    if (vars.length > 0) {
+      h += '<div class="vp-section">';
+      h += '<div class="vp-title">Inline variables (' + vars.length + ')</div>';
+      h += '<div class="vp-vars">';
+      vars.forEach(function(v) {
+        h += '<div class="vp-var"><span class="vp-key">' + esc(v.name) + '</span>';
+        h += '<span class="vp-val">' + esc(v.value) + '</span></div>';
+      });
+      h += '</div></div>';
+    }
+    panel.innerHTML = h;
+  }
+
+  // -- PNG export: draw the stage-level layout onto a 2D canvas --
+  // Pure canvas drawing (no external image) so toDataURL stays untainted.
+  function colorForType(t) {
+    var map = {
+      build: '#4fc3f7', deploy: '#81c784', validate: '#ffb74d', detect: '#ff7043',
+      sync: '#a177e9', template: '#9e9e9e', generic: '#c0866c', test: '#f06292',
+      nuget: '#ffca28', database: '#388e3c'
+    };
+    return map[t] || '#c0866c';
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function fitText(ctx, text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    var t = text;
+    while (t.length > 1 && ctx.measureText(t + '...').width > maxW) t = t.slice(0, -1);
+    return t + '...';
+  }
+
+  function drawEdgeCtx(ctx, from, to) {
+    var x1 = from.x + from.w, y1 = from.y + from.h / 2;
+    var x2 = to.x, y2 = to.y + to.h / 2, midX = (x1 + x2) / 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(midX, y1);
+    ctx.lineTo(midX, y2);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    var a = 6;
+    ctx.beginPath();
+    ctx.moveTo(x2 - a, y2 - a / 2);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - a, y2 + a / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function renderPng() {
+    if (!lo) return null;
+    var W = 280, HH = 92, HG = 80, VG = 42, PADp = 40, scale = 2;
+    var pos = {}, maxX = 0, maxY = 0;
+    for (var c = 0; c <= lo.maxLayer; c++) {
+      var colStages = lo.groups[c] || [];
+      for (var ri = 0; ri < colStages.length; ri++) {
+        var s = colStages[ri];
+        var x = PADp + c * (W + HG), y = PADp + ri * (HH + VG);
+        pos[s.name] = { x: x, y: y, w: W, h: HH };
+        maxX = Math.max(maxX, x + W); maxY = Math.max(maxY, y + HH);
+      }
+    }
+    var cw = Math.max(maxX + PADp, 400), ch = Math.max(maxY + PADp, 160);
+    var cv = document.createElement('canvas');
+    cv.width = Math.ceil(cw * scale); cv.height = Math.ceil(ch * scale);
+    var ctx = cv.getContext('2d');
+    ctx.scale(scale, scale);
+    var bs = getComputedStyle(document.body);
+    ctx.fillStyle = bs.backgroundColor || '#1e1e1e';
+    ctx.fillRect(0, 0, cw, ch);
+    var textColor = bs.color || '#cccccc';
+    var sample = document.querySelector('.stage-node');
+    var nodeBg = sample ? getComputedStyle(sample).backgroundColor : '#2d2d2d';
+    var borderCol = sample ? getComputedStyle(sample).borderTopColor : '#555555';
+
+    ctx.strokeStyle = borderCol; ctx.fillStyle = borderCol; ctx.lineWidth = 2;
+    stages.forEach(function(s) {
+      var to = pos[s.name];
+      if (!to) return;
+      (s.dependsOn || []).forEach(function(dn) {
+        var from = pos[dn];
+        if (from) drawEdgeCtx(ctx, from, to);
+      });
+    });
+
+    stages.forEach(function(s) {
+      var p = pos[s.name];
+      if (!p) return;
+      roundRectPath(ctx, p.x, p.y, p.w, p.h, 10);
+      ctx.fillStyle = nodeBg; ctx.fill();
+      ctx.strokeStyle = borderCol; ctx.lineWidth = 1; ctx.stroke();
+      var col = colorForType(s.type);
+      ctx.save();
+      roundRectPath(ctx, p.x, p.y, p.w, p.h, 10);
+      ctx.clip();
+      ctx.fillStyle = col; ctx.fillRect(p.x, p.y, 5, p.h);
+      ctx.restore();
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = textColor; ctx.font = '600 13px "Segoe UI",sans-serif';
+      ctx.fillText(fitText(ctx, stageTitle(s), p.w - 26), p.x + 16, p.y + 26);
+      ctx.fillStyle = col; ctx.font = '700 9px "Segoe UI",sans-serif';
+      ctx.fillText(s.type.toUpperCase(), p.x + 16, p.y + 44);
+      if (s.isConditional && s.conditionalExpr) {
+        ctx.fillStyle = '#ffb74d'; ctx.font = '9px monospace';
+        ctx.fillText(fitText(ctx, 'if: ' + s.conditionalExpr, p.w - 26), p.x + 16, p.y + 60);
+      }
+      var jobs = s.jobs || [];
+      var steps = jobs.reduce(function(a, j) { return a + (j.steps ? j.steps.length : 0); }, 0);
+      ctx.fillStyle = textColor; ctx.globalAlpha = 0.55; ctx.font = '10px "Segoe UI",sans-serif';
+      ctx.fillText(jobs.length + ' job(s), ' + steps + ' step(s)', p.x + 16, p.y + p.h - 14);
+      ctx.globalAlpha = 1;
+    });
+    return cv.toDataURL('image/png');
+  }
 
   // -- Wire click events (delegate on canvas) --
   canvas.addEventListener('click', function(e) {
-    // Step card with children toggle (whole card is clickable)
     var stepCard = e.target.closest('.step-flow-card.has-children');
     if (stepCard) {
-      // Don't toggle if clicking interactive sub-elements
       if (e.target.closest('[data-toggle-inputs]') || e.target.closest('.sf-inputs-list')
         || e.target.closest('[data-nav-path]') || e.target.closest('[data-toggle-script]')) {
         // fall through to other handlers
@@ -465,7 +773,6 @@ export function getScript(): string {
         return;
       }
     }
-    // Inputs toggle
     var toggle = e.target.closest('[data-toggle-inputs]');
     if (toggle) {
       e.stopPropagation();
@@ -473,7 +780,6 @@ export function getScript(): string {
       if (list) list.classList.toggle('expanded');
       return;
     }
-    // Script full-text expand
     var scriptToggle = e.target.closest('[data-toggle-script]');
     if (scriptToggle) {
       e.stopPropagation();
@@ -483,7 +789,6 @@ export function getScript(): string {
       }
       return;
     }
-    // Template step / stage / job navigation (highest priority - do not toggle stage)
     var navCard = e.target.closest('[data-nav-path]');
     if (navCard) {
       e.stopPropagation();
@@ -493,10 +798,8 @@ export function getScript(): string {
       vscode.postMessage({ command: 'visualizeTemplate', path: navCard.getAttribute('data-nav-path'), callerParams: navParams });
       return;
     }
-    // Job toggle (click on job-card header or body when collapsed)
     var jobHeader = e.target.closest('.job-header');
     if (jobHeader) {
-      // Do not toggle if clicking the nav link
       if (e.target.closest('.job-nav')) return;
       var jobCard = jobHeader.closest('.job-card');
       if (jobCard) {
@@ -505,18 +808,15 @@ export function getScript(): string {
         return;
       }
     }
-    // Click on collapsed job-card body area (footer, meta) also toggles
-    var jobCard = e.target.closest('.job-card');
-    if (jobCard && !jobCard.classList.contains('expanded')) {
+    var jobCard2 = e.target.closest('.job-card');
+    if (jobCard2 && !jobCard2.classList.contains('expanded')) {
       if (e.target.closest('.job-nav')) return;
-      jobCard.classList.toggle('expanded');
+      jobCard2.classList.toggle('expanded');
       relayout();
       return;
     }
-    // Stage toggle (only if clicking the stage header area, not inner content)
     var stageEl = e.target.closest('.stage-node');
     if (stageEl) {
-      // If click is inside stage-inner, do nothing (let inner events handle)
       var inner = e.target.closest('.stage-inner');
       if (inner) return;
       var name = stageEl.getAttribute('data-stage');
@@ -542,19 +842,9 @@ export function getScript(): string {
       var el = canvas.querySelector('[data-stage="' + attrEsc(s.name) + '"]');
       if (el) { el.classList.add('expanded'); expandedStages[s.name] = true; }
     });
-    // Expand all param/input toggles too
-    canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) {
-      list.classList.add('expanded');
-    });
-    // Expand all job cards
-    canvas.querySelectorAll('.job-card').forEach(function(jc) {
-      jc.classList.add('expanded');
-    });
-    // Expand all child step flows
-    canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) {
-      cf.classList.add('expanded');
-    });
-    // Expand header params grid
+    canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) { list.classList.add('expanded'); });
+    canvas.querySelectorAll('.job-card').forEach(function(jc) { jc.classList.add('expanded'); });
+    canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) { cf.classList.add('expanded'); });
     var hpGrid = document.querySelector('.header-params-grid');
     if (hpGrid) hpGrid.classList.remove('collapsed');
     relayout();
@@ -566,19 +856,9 @@ export function getScript(): string {
       if (el) el.classList.remove('expanded');
     });
     expandedStages = {};
-    // Collapse all param/input toggles too
-    canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) {
-      list.classList.remove('expanded');
-    });
-    // Collapse all job cards
-    canvas.querySelectorAll('.job-card').forEach(function(jc) {
-      jc.classList.remove('expanded');
-    });
-    // Collapse all child step flows
-    canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) {
-      cf.classList.remove('expanded');
-    });
-    // Collapse header params grid
+    canvas.querySelectorAll('.sf-inputs-list').forEach(function(list) { list.classList.remove('expanded'); });
+    canvas.querySelectorAll('.job-card').forEach(function(jc) { jc.classList.remove('expanded'); });
+    canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) { cf.classList.remove('expanded'); });
     var hpGrid = document.querySelector('.header-params-grid');
     if (hpGrid) hpGrid.classList.add('collapsed');
     relayout();
@@ -586,7 +866,6 @@ export function getScript(): string {
 
   // -- Relayout: measure heights, reposition, redraw connectors --
   function relayout() {
-    // Update widths based on expanded state
     document.querySelectorAll('.stage-node').forEach(function(el) {
       var nm = el.getAttribute('data-stage');
       if (nm && nodePositions[nm]) {
@@ -595,7 +874,6 @@ export function getScript(): string {
         el.style.width = nodePositions[nm].w + 'px';
       }
     });
-    // Let the DOM reflow before measuring heights
     requestAnimationFrame(function() {
       document.querySelectorAll('.stage-node').forEach(function(el) {
         var nm = el.getAttribute('data-stage');
@@ -603,7 +881,7 @@ export function getScript(): string {
           nodePositions[nm].h = el.getBoundingClientRect().height / zoom;
         }
       });
-      // Compute column X positions dynamically based on widest node per column
+      if (!lo) return;
       var colX = [];
       var xCursor = PAD;
       for (var c = 0; c <= lo.maxLayer; c++) {
@@ -614,17 +892,16 @@ export function getScript(): string {
         });
         xCursor += maxW + H_GAP;
       }
-      // Apply horizontal and vertical positions
-      for (var c = 0; c <= lo.maxLayer; c++) {
-        var cStages = lo.groups[c] || [];
+      for (var c2 = 0; c2 <= lo.maxLayer; c2++) {
+        var cStages = lo.groups[c2] || [];
         var yOff = PAD;
         cStages.forEach(function(s) {
-          nodePositions[s.name].x = colX[c];
+          nodePositions[s.name].x = colX[c2];
           nodePositions[s.name].y = yOff;
           yOff += nodePositions[s.name].h + V_GAP;
           var el = canvas.querySelector('[data-stage="' + attrEsc(s.name) + '"]');
           if (el) {
-            el.style.left = colX[c] + 'px';
+            el.style.left = colX[c2] + 'px';
             el.style.top = nodePositions[s.name].y + 'px';
           }
         });
@@ -632,9 +909,6 @@ export function getScript(): string {
       renderConnectors();
     });
   }
-
-  // Initial layout
-  relayout();
 
   // -- Orthogonal Connectors --
   function renderConnectors() {
@@ -695,7 +969,12 @@ export function getScript(): string {
     svg.appendChild(poly);
   }
 
-  // -- Toolbar (always visible for all template types) --
+  // -- Initial render --
+  renderParamPanel();
+  renderVarsPanel();
+  classifyAndBuild();
+
+  // -- Toolbar --
   document.getElementById('btnExpandAll').addEventListener('click', expandAll);
   document.getElementById('btnCollapseAll').addEventListener('click', collapseAll);
   document.getElementById('btnZoomIn').addEventListener('click', function() {
@@ -712,12 +991,45 @@ export function getScript(): string {
   document.getElementById('btnOpenSource').addEventListener('click', function() {
     vscode.postMessage({ command: 'openFile', path: MODEL.filePath });
   });
+  // Inspector toggles: clicking shows/hides the panel and syncs the button's
+  // 'is-open' state (which drives the neon glow). Disabled buttons do nothing.
+  function wireInspector(btnId, panelId) {
+    var b = document.getElementById(btnId);
+    if (!b) return;
+    b.addEventListener('click', function() {
+      if (b.disabled) return;
+      var p = document.getElementById(panelId);
+      if (!p) return;
+      var nowHidden = p.classList.toggle('hidden');
+      b.classList.toggle('is-open', !nowHidden);
+    });
+  }
+  wireInspector('btnParams', 'param-panel');
+  wireInspector('btnVariables', 'vars-panel');
+  wireInspector('btnExcluded', 'skipped-panel');
+  var btnExportPng = document.getElementById('btnExportPng');
+  if (btnExportPng) {
+    btnExportPng.addEventListener('click', function() {
+      try {
+        var dataUrl = renderPng();
+        if (dataUrl) {
+          vscode.postMessage({
+            command: 'exportPng',
+            dataUrl: dataUrl,
+            fileName: MODEL.fileName.replace(/\\.(yml|yaml)$/i, '') + '.png'
+          });
+        }
+      } catch (ex) {
+        document.getElementById('canvas').innerHTML +=
+          '<div style="color:#f44;padding:10px">Export failed: ' + esc(String(ex)) + '</div>';
+      }
+    });
+  }
 
   // -- Theme switcher --
   var themeSelect = document.getElementById('themeSelect');
   var globalTheme = document.body.getAttribute('data-theme') || 'system';
   themeSelect.value = globalTheme;
-  // Reconcile with per-panel state if needed
   var savedState = vscode.getState() || {};
   if (!savedState.theme) {
     vscode.setState(Object.assign({}, savedState, { theme: globalTheme }));

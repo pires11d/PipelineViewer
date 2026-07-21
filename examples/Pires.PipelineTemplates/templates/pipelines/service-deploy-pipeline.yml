@@ -1,0 +1,124 @@
+# =============================================================================
+# Service Deploy Pipeline Template  (SYNTHETIC DEMO)
+#
+# Orchestrates: build & test -> optional integration tests -> environment
+# fan-out. Each environment is a nested stage template that itself calls a
+# shared deploy stage, which in turn calls step templates. This deliberately
+# nests several template levels to exercise recursive resolution.
+#
+#   service-deploy-pipeline (this file)
+#     -> stages/build-and-test-stage
+#          -> steps/restore-and-build, run-unit-tests, publish-artifact
+#     -> stages/integration-tests-stage        (if runIntegrationTests)
+#     -> stages/environments/{dev,staging,prod}        (if deployTo*)
+#          -> stages/deploy-environment-stage
+#               -> steps/deploy-service, smoke-test
+# =============================================================================
+
+parameters:
+  - name: serviceName
+    type: string
+
+  - name: isWebService
+    type: boolean
+    default: true
+
+  - name: solution
+    type: string
+    default: '**/*.sln'
+
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+
+  - name: releaseChannel
+    type: string
+    default: 'stable'
+
+  - name: runIntegrationTests
+    type: boolean
+    default: true
+
+  - name: deployToDev
+    type: boolean
+    default: false
+
+  - name: deployToStaging
+    type: boolean
+    default: false
+
+  - name: deployToProd
+    type: boolean
+    default: false
+
+stages:
+  # -------------------------------------------------------------------
+  # Build the service, run unit tests, publish the deployable artifact.
+  # -------------------------------------------------------------------
+  - template: ../stages/build-and-test-stage.yml
+    parameters:
+      stageName: BuildAndTest
+      serviceName: ${{ parameters.serviceName }}
+      solution: ${{ parameters.solution }}
+      buildConfiguration: ${{ parameters.buildConfiguration }}
+
+  # -------------------------------------------------------------------
+  # Integration tests (optional). Runs against the freshly built artifact.
+  # -------------------------------------------------------------------
+  - ${{ if eq(parameters.runIntegrationTests, true) }}:
+    - template: ../stages/integration-tests-stage.yml
+      parameters:
+        stageName: IntegrationTests
+        serviceName: ${{ parameters.serviceName }}
+        buildConfiguration: ${{ parameters.buildConfiguration }}
+        dependsOn:
+          - BuildAndTest
+
+  # -------------------------------------------------------------------
+  # Environment fan-out. Each is gated on its own run parameter.
+  # -------------------------------------------------------------------
+  - ${{ if eq(parameters.deployToDev, true) }}:
+    - template: ../stages/environments/dev.yml
+      parameters:
+        serviceName: ${{ parameters.serviceName }}
+        buildConfiguration: ${{ parameters.buildConfiguration }}
+        releaseChannel: ${{ parameters.releaseChannel }}
+        dependsOnStage: 
+        - BuildAndTest
+
+  - ${{ if eq(parameters.deployToStaging, true) }}:
+    - template: ../stages/environments/stg.yml
+      parameters:
+        serviceName: ${{ parameters.serviceName }}
+        buildConfiguration: ${{ parameters.buildConfiguration }}
+        releaseChannel: ${{ parameters.releaseChannel }}
+        dependsOnStage: 
+        - IntegrationTests
+
+  - ${{ if eq(parameters.deployToProd, true) }}:
+    - template: ../stages/environments/prd.yml
+      parameters:
+        serviceName: ${{ parameters.serviceName }}
+        buildConfiguration: ${{ parameters.buildConfiguration }}
+        releaseChannel: ${{ parameters.releaseChannel }}
+        dependsOnStage: 
+        - IntegrationTests
+
+  # -------------------------------------------------------------------
+  # Publish release notes for non-stable channels (beta/canary).
+  # -------------------------------------------------------------------
+  - ${{ if ne(parameters.releaseChannel, 'stable') }}:
+    - stage: PublishReleaseNotes
+      displayName: 'Publish Release Notes'
+      dependsOn: BuildAndTest
+      jobs:
+        - job: Notes
+          displayName: 'Generate & publish notes'
+          steps:
+            - checkout: self
+            - task: PowerShell@2
+              displayName: 'Generate release notes'
+              inputs:
+                targetType: 'inline'
+                script: |
+                  Write-Host "Generating $(releaseChannel) release notes for ${{ parameters.serviceName }}"

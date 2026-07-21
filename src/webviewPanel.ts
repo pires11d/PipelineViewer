@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 import { PipelineModel, PipelineParser } from './pipelineParser';
 import { getStyles } from './webviewStyles';
 import { getScript } from './webviewScript';
@@ -55,6 +57,9 @@ export class PipelineViewerPanel {
       }
       if (msg.command === 'findCallers' && msg.filePath) {
         this.findCallers(msg.filePath);
+      }
+      if (msg.command === 'exportPng' && msg.dataUrl) {
+        this.savePng(msg.dataUrl, msg.fileName);
       }
       if (msg.command === 'visualizeTemplate' && msg.path) {
         try {
@@ -113,11 +118,11 @@ export class PipelineViewerPanel {
       try {
         const doc = await vscode.workspace.openTextDocument(file);
         const text = doc.getText();
-        // Match filename preceded by a non-filename character (path sep, space, colon, etc.)
-        // This prevents 'preprod-deploy.yml' from matching inside 'create-preprod-deploy.yml'
-        const escaped = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp(`(?:^|[^a-zA-Z0-9_-])${escaped}`, 'm');
-        if (pattern.test(text)) {
+        // Only count real references: a `template:` value whose basename matches
+        // this file. Matching on raw text produced false positives from comments
+        // and from filenames embedded in longer ones (e.g. 'preprod-deploy.yml'
+        // inside 'create-preprod-deploy.yml').
+        if (this.referencesTemplate(text, fileName)) {
           const parts = file.fsPath.replace(/\\/g, '/').split('/');
           const name = parts.pop() || '';
           // Infer project from folder structure (repo root name)
@@ -128,6 +133,51 @@ export class PipelineViewerPanel {
       } catch { /* skip unreadable files */ }
     }
     this.panel.webview.postMessage({ command: 'callersResult', callers });
+  }
+
+  // Write a base64 data URL (data:image/png;base64,...) to a user-chosen path.
+  private async savePng(dataUrl: string, fileName?: string) {
+    const match = /^data:image\/png;base64,(.+)$/.exec(dataUrl);
+    if (!match) {
+      vscode.window.showErrorMessage('Export failed: unexpected image data.');
+      return;
+    }
+    const defaultName = (fileName || 'pipeline.png').replace(/[\\/:*?"<>|]/g, '_');
+    const folders = vscode.workspace.workspaceFolders;
+    const defaultUri = folders && folders.length > 0
+      ? vscode.Uri.joinPath(folders[0].uri, defaultName)
+      : vscode.Uri.file(defaultName);
+    const target = await vscode.window.showSaveDialog({
+      defaultUri,
+      filters: { Images: ['png'] },
+    });
+    if (!target) { return; }
+    try {
+      fs.writeFileSync(target.fsPath, Buffer.from(match[1], 'base64'));
+      const open = 'Open';
+      const choice = await vscode.window.showInformationMessage(`Diagram exported to ${target.fsPath}`, open);
+      if (choice === open) {
+        vscode.commands.executeCommand('vscode.open', target);
+      }
+    } catch (err: any) {
+      vscode.window.showErrorMessage(`Export failed: ${err.message}`);
+    }
+  }
+
+  // True if the text has a `template:` reference whose basename matches fileName.
+  // Handles quoted values and @repo-alias suffixes; ignores non-template mentions.
+  private referencesTemplate(text: string, fileName: string): boolean {
+    const target = fileName.toLowerCase();
+    const re = /template\s*:\s*['"]?([^'"\n#]+)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      let ref = m[1].trim();
+      const at = ref.lastIndexOf('@');
+      if (at > 0) { ref = ref.substring(0, at); }
+      const base = ref.replace(/\\/g, '/').split('/').pop() || '';
+      if (base.toLowerCase() === target) { return true; }
+    }
+    return false;
   }
 
   private dispose() {
@@ -166,6 +216,7 @@ export class PipelineViewerPanel {
     <button id="btnResetZoom" title="Reset Zoom">Reset</button>
     <button id="btnOpenSource" title="Open YAML source file">View Source</button>
     <button id="btnCalledBy" title="Find pipelines that reference this file">Called By</button>
+    <button id="btnExportPng" title="Export the diagram as a PNG image">Export PNG</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="themeSelect">Theme:</label>
     <select id="themeSelect" title="Color theme">
@@ -174,7 +225,16 @@ export class PipelineViewerPanel {
       <option value="light">Light</option>
     </select>
   </div>
+  <div id="inspector-bar">
+    <span class="inspector-label">Inspect</span>
+    <button id="btnParams" class="inspector-btn ins-params" title="Adjust run parameters and preview which stages run" disabled>Parameters</button>
+    <button id="btnVariables" class="inspector-btn ins-vars" title="Show variable groups and inline variables" disabled>Variables</button>
+    <button id="btnExcluded" class="inspector-btn ins-skip" title="Show or hide the skipped-stages list" disabled>Skipped</button>
+  </div>
+  <div id="param-panel" class="param-panel hidden"></div>
+  <div id="vars-panel" class="vars-panel hidden"></div>
   <div id="callers-panel" class="callers-panel hidden"></div>
+  <div id="skipped-panel" class="skipped-panel hidden"></div>
   <div id="canvas-wrapper">
     <div id="canvas"></div>
   </div>
@@ -190,10 +250,5 @@ export class PipelineViewerPanel {
 }
 
 function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  return crypto.randomBytes(24).toString('base64').replace(/[^a-zA-Z0-9]/g, '');
 }

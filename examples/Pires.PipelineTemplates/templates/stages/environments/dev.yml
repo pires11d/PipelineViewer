@@ -1,0 +1,23 @@
+# Dev environment (SYNTHETIC DEMO). Thin wrapper over the shared deploy stage.
+parameters:
+  - name: serviceName
+    type: string
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+  - name: releaseChannel
+    type: string
+    default: 'stable'
+  - name: dependsOnStage
+    type: string
+    default: BuildAndTest
+
+stages:
+  - template: ../deploy-environment-stage.yml
+    parameters:
+      environmentName: Development
+      serviceName: ${{ parameters.serviceName }}
+      buildConfiguration: ${{ parameters.buildConfiguration }}
+      releaseChannel: ${{ parameters.releaseChannel }}
+      dependsOnStage: ${{ parameters.dependsOnStage }}
+      requireApproval: false

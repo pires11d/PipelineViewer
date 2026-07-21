@@ -1,0 +1,83 @@
+# =============================================================================
+# Pires.CheckoutService - Service Deploy Pipeline
+#
+# SYNTHETIC DEMO PIPELINE. Not tied to any real system. Exists purely to show
+# off PipelineViewer: a thin wrapper that extends a shared template library,
+# fans out to multiple environments, and gates stages on run parameters.
+#
+# Run it manually and tick the environments you want. The parameter picker in
+# PipelineViewer lets you preview which stages run without leaving the diagram.
+# =============================================================================
+
+name: Checkout-$(Date:yyyyMMdd)$(Rev:.r)
+
+parameters:
+  - name: deployToDev
+    type: boolean
+    default: false
+    displayName: 'Deploy to Dev'
+
+  - name: deployToStaging
+    type: boolean
+    default: true
+    displayName: 'Deploy to Staging'
+
+  - name: deployToProd
+    type: boolean
+    default: false
+    displayName: 'Deploy to Production'
+
+  - name: runIntegrationTests
+    type: boolean
+    default: true
+    displayName: 'Run integration tests'
+
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+    displayName: 'Build configuration'
+    values:
+      - Debug
+      - Release
+
+  - name: releaseChannel
+    type: string
+    default: 'stable'
+    displayName: 'Release channel'
+    values:
+      - stable
+      - beta
+      - canary
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: PiresPlatform/Pires.PipelineTemplates
+      ref: main
+
+trigger: none
+pr: none
+
+pool:
+  name: PiresLinuxPool
+
+variables:
+  - group: pires-shared
+  - name: serviceName
+    value: 'Pires.CheckoutService'
+  - name: solution
+    value: 'src/Pires.CheckoutService.sln'
+
+extends:
+  template: templates/pipelines/service-deploy-pipeline.yml@templates
+  parameters:
+    serviceName: 'Pires.CheckoutService'
+    isWebService: true
+    solution: 'src/Pires.CheckoutService.sln'
+    buildConfiguration: ${{ parameters.buildConfiguration }}
+    releaseChannel: ${{ parameters.releaseChannel }}
+    runIntegrationTests: ${{ parameters.runIntegrationTests }}
+    deployToDev: ${{ parameters.deployToDev }}
+    deployToStaging: ${{ parameters.deployToStaging }}
+    deployToProd: ${{ parameters.deployToProd }}

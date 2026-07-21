@@ -1,0 +1,29 @@
+# Integration test steps (SYNTHETIC DEMO)
+parameters:
+  - name: serviceName
+    type: string
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+
+steps:
+  - task: DownloadBuildArtifacts@1
+    displayName: 'Download build artifact'
+    inputs:
+      artifactName: 'drop'
+      downloadPath: '$(System.ArtifactsDirectory)'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Run integration tests'
+    inputs:
+      command: 'test'
+      projects: '**/*IntegrationTests.csproj'
+      arguments: '--configuration ${{ parameters.buildConfiguration }}'
+
+  - task: PowerShell@2
+    displayName: 'Tear down test resources'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Cleaning up integration test resources for ${{ parameters.serviceName }}"
+    condition: always()

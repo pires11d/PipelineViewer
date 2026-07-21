@@ -17,6 +17,15 @@ export interface PipelineModel {
   stages: StageNode[];
   callerParams: Record<string, any>;
   templateType: 'pipeline' | 'pipelineTemplate' | 'stages' | 'jobs' | 'steps';
+  // User-adjustable run parameters (this pipeline's own declared parameters),
+  // used to drive the interactive parameter picker in the webview.
+  controls: ParamControl[];
+  // Effective parameter values (defaults + resolved caller overrides) keyed by
+  // the parameter names used inside ${{ }} conditions. Seeds the picker.
+  paramValues: Record<string, any>;
+  // Variable groups referenced anywhere in the resolved template tree. These
+  // live in ADO (Pipelines > Library) and must exist in the target project.
+  variableGroups: string[];
 }
 
 export interface ParamDef {
@@ -24,6 +33,15 @@ export interface ParamDef {
   type: string;
   default: string;
   displayName: string;
+  values: string[];
+}
+
+export interface ParamControl {
+  name: string;
+  type: string;
+  value: any;
+  displayName: string;
+  values: string[];
 }
 
 export interface ResourceRef {
@@ -92,6 +110,7 @@ export class PipelineParser {
   private visited: Set<string> = new Set();
   private fileCache: Map<string, any> = new Map();
   private originalDeps: Map<string, string> = new Map();
+  private variableGroups: Set<string> = new Set();
   private idCounter = 0;
 
   constructor(workspaceFolders: string[], manualMappings: Record<string, string>, maxDepth: number) {
@@ -106,6 +125,7 @@ export class PipelineParser {
 
   parse(filePath: string): PipelineModel {
     this.originalDeps.clear();
+    this.variableGroups.clear();
     const raw = fs.readFileSync(filePath, 'utf-8');
     const preprocessed = this.flattenConditionalArrayItems(raw);
     const content = this.deduplicateConditionalKeys(preprocessed);
@@ -113,6 +133,7 @@ export class PipelineParser {
     if (!doc || typeof doc !== 'object') {
       throw new Error('Invalid YAML document');
     }
+    this.scanForVariableGroups(doc);
 
     // Extract repo mappings from resources
     this.extractRepoMappings(doc, path.dirname(filePath));
@@ -122,6 +143,12 @@ export class PipelineParser {
       this.repoMappings.set(alias, folder);
     }
 
+    // The pipeline's OWN declared parameters -- these are what a user picks at
+    // run time and what drives the interactive parameter picker. Captured up
+    // front because model.parameters gets replaced by the template's own
+    // parameter defs in the extends case below.
+    const rootParams = this.parseParams(doc.parameters);
+
     const model: PipelineModel = {
       fileName: path.basename(filePath),
       filePath,
@@ -129,20 +156,37 @@ export class PipelineParser {
       trigger: this.describeTrigger(doc.trigger),
       pr: this.describeTrigger(doc.pr),
       pool: this.describePool(doc.pool),
-      parameters: this.parseParams(doc.parameters),
+      parameters: rootParams,
       resources: this.parseResources(doc.resources),
       variables: this.parseVariables(doc.variables),
       stages: [],
       callerParams: {},
       templateType: 'pipeline',
+      controls: [],
+      paramValues: {},
+      variableGroups: [],
     };
 
     const dir = path.dirname(filePath);
 
     if (doc.extends) {
+      // Capture the OUTER pipeline's own parameter defaults so that caller
+      // values written as ${{ parameters.X }} (pass-through of this pipeline's
+      // own params into the template) resolve to the declared default instead
+      // of an unresolved expression.
+      const outerParamDefaults: Record<string, any> = {};
+      for (const p of model.parameters) {
+        if (p.default !== undefined && p.default !== null && p.default !== '') {
+          outerParamDefaults[p.name] = this.parseParamValue(p.default, p.type);
+        }
+      }
+
       // Template-based pipeline -- extract caller-supplied parameters
       if (doc.extends.parameters && typeof doc.extends.parameters === 'object') {
         model.callerParams = { ...doc.extends.parameters };
+        for (const [k, v] of Object.entries(model.callerParams)) {
+          model.callerParams[k] = this.resolveSelfParamRef(v, outerParamDefaults);
+        }
       }
       const tplRef = this.str(doc.extends.template);
       const resolved = this.resolveTemplatePath(tplRef, dir);
@@ -192,6 +236,18 @@ export class PipelineParser {
     // Build effective parameter values (template defaults + caller overrides)
     const effective = this.buildEffectiveParams(model);
 
+    // Expose the effective values + user-adjustable controls so the webview
+    // can drive the interactive parameter picker and recompute skipped stages.
+    model.paramValues = effective;
+    model.controls = rootParams.map(p => ({
+      name: p.name,
+      type: p.type,
+      displayName: p.displayName,
+      values: p.values,
+      // Prefer the resolved effective value; fall back to the declared default.
+      value: p.name in effective ? effective[p.name] : this.parseParamValue(p.default, p.type),
+    }));
+
     // Resolve ${{ parameters.X }} refs in stage names and dependsOn
     this.resolveParameterRefs(model.stages, effective);
 
@@ -203,6 +259,9 @@ export class PipelineParser {
     if (Object.keys(model.callerParams).length > 0) {
       this.evaluateConditions(model, effective);
     }
+
+    // All variable groups discovered while resolving the tree (sorted, unique).
+    model.variableGroups = [...this.variableGroups].sort((a, b) => a.localeCompare(b));
 
     return model;
   }
@@ -216,10 +275,35 @@ export class PipelineParser {
       const content = this.deduplicateConditionalKeys(preprocessed);
       const doc = yaml.load(content) as any;
       this.fileCache.set(key, doc);
+      this.scanForVariableGroups(doc);
       return doc;
     } catch {
       this.fileCache.set(key, null);
       return null;
+    }
+  }
+
+  // Walk a loaded doc for `variables: [ { group: X } ]` at any nesting level
+  // (root, stage, or job) and record every group name referenced.
+  private scanForVariableGroups(node: any): void {
+    if (!node || typeof node !== 'object') { return; }
+    if (Array.isArray(node)) {
+      for (const item of node) { this.scanForVariableGroups(item); }
+      return;
+    }
+    for (const [key, val] of Object.entries(node)) {
+      if (key === 'variables' && Array.isArray(val)) {
+        for (const item of val) {
+          if (item && typeof item === 'object' && (item as any).group) {
+            // Group names can be templated (e.g. dart-${{ parameters.env }}).
+            // Humanize unresolved refs to {env} so the panel stays readable.
+            const name = this.str((item as any).group)
+              .replace(/\$\{\{\s*(?:parameters|variables)\.(\w+)\s*\}\}/g, '{$1}');
+            this.variableGroups.add(name);
+          }
+        }
+      }
+      this.scanForVariableGroups(val);
     }
   }
 
@@ -894,9 +978,34 @@ export class PipelineParser {
       }
     }
     for (const [k, v] of Object.entries(model.callerParams)) {
+      // Never let a still-unresolved ${{ }} expression clobber a known
+      // template default -- fall back to the default so conditions can
+      // evaluate against a concrete value instead of blanking the diagram.
+      if (this.isUnresolvedExpr(v) && k in effective) { continue; }
       effective[k] = v;
     }
     return effective;
+  }
+
+  // A caller parameter value may reference the enclosing pipeline's own
+  // parameters (e.g. recoverLTQA: ${{ parameters.recoverLTQA }}). Resolve such
+  // references to the outer pipeline's declared default so downstream condition
+  // evaluation uses a concrete value. Values with no known default are left
+  // untouched.
+  private resolveSelfParamRef(val: any, outerDefaults: Record<string, any>): any {
+    if (typeof val !== 'string') { return val; }
+    const whole = val.match(/^\$\{\{\s*parameters\.(\w+)\s*\}\}$/);
+    if (whole) {
+      const name = whole[1];
+      return name in outerDefaults ? outerDefaults[name] : val;
+    }
+    // Embedded references inside a larger string
+    return val.replace(/\$\{\{\s*parameters\.(\w+)\s*\}\}/g, (m, name) =>
+      name in outerDefaults ? String(outerDefaults[name]) : m);
+  }
+
+  private isUnresolvedExpr(v: any): boolean {
+    return typeof v === 'string' && /\$\{\{.*\}\}/.test(v);
   }
 
   // Replace ${{ parameters.X }} in stage names and dependsOn with resolved values
@@ -940,7 +1049,7 @@ export class PipelineParser {
 
   private parseParamValue(val: string, type: string): any {
     if (type === 'boolean') {
-      return val === 'true' || val === true;
+      return val === 'true';
     }
     return val;
   }
@@ -1180,6 +1289,7 @@ export class PipelineParser {
       type: this.str(p.type) || 'string',
       default: this.str(p.default),
       displayName: this.str(p.displayName) || this.str(p.name),
+      values: Array.isArray(p.values) ? p.values.map((v: any) => this.str(v)) : [],
     }));
   }
 

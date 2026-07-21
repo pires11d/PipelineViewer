@@ -1,0 +1,18 @@
+# Smoke test steps (SYNTHETIC DEMO)
+parameters:
+  - name: serviceName
+    type: string
+  - name: environmentName
+    type: string
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Health check'
+    inputs:
+      targetType: 'inline'
+      script: |
+        Write-Host "Health-checking ${{ parameters.serviceName }} on ${{ parameters.environmentName }}"
+        # A real check would poll the /health endpoint until it returns 200.
+
+  - script: echo "Smoke test passed for ${{ parameters.serviceName }}"
+    displayName: 'Report smoke result'

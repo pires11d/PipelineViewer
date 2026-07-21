@@ -1,0 +1,30 @@
+# Integration Tests stage (SYNTHETIC DEMO)
+# Pulls the built artifact and runs the integration suite against it.
+parameters:
+  - name: stageName
+    type: string
+    default: IntegrationTests
+  - name: serviceName
+    type: string
+  - name: buildConfiguration
+    type: string
+    default: 'Release'
+  - name: dependsOn
+    type: object
+    default: []
+
+stages:
+  - stage: ${{ parameters.stageName }}
+    displayName: 'Integration Tests'
+    dependsOn: ${{ parameters.dependsOn }}
+    variables:
+      - group: pires-shared
+    jobs:
+      - job: IntegrationJob
+        displayName: 'Run integration suite'
+        steps:
+          - checkout: none
+          - template: ../steps/run-integration-tests-steps.yml
+            parameters:
+              serviceName: ${{ parameters.serviceName }}
+              buildConfiguration: ${{ parameters.buildConfiguration }}

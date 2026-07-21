@@ -22,7 +22,7 @@ Every diagram opens with a compact header that tells you where you are at a glan
 ### Interactive diagram
 - Renders pipeline stages as a directed graph with orthogonal connectors and dependency arrows
 - Expand and collapse stages to inspect jobs and individual steps
-- Color-coded **stage types** (Build, Deploy, Validate, Detect, Sync, Test, NuGet, Database, etc.)
+- Color-coded **stage types** (Build, Deploy, Validate, Sync, Test, NuGet, etc.)
 - Color-coded **step types** (VSBuild, NuGet, PowerShell, Bash, SonarQube, Cmd, etc.)
 - Template type badges on headers (see [Template Type Hierarchy](#template-type-hierarchy) below)
 - Conditional stages shown with dashed borders; skipped stages dimmed
@@ -118,16 +118,15 @@ Stages are automatically classified by name and display-name keywords, then colo
 
 | Color | Stage Type | Keyword Triggers |
 |:------|:-----------|:-----------------|
+| ![Validate](https://img.shields.io/badge/-ff7043?style=flat-square) | Validate | `validat`, `check` |
+| ![Test](https://img.shields.io/badge/-f06292?style=flat-square) | Test | `test` |
+| ![Sync](https://img.shields.io/badge/-a177e9?style=flat-square) | Sync | `sync`, `drift`, `backfill`, `refresh`, `recovery` |
+| ![Detect](https://img.shields.io/badge/-3d5afe?style=flat-square) | Detect | `detect`, `determine`, `extract` |
 | ![Build](https://img.shields.io/badge/-4fc3f7?style=flat-square) | Build | `build`, `restore` |
 | ![Deploy](https://img.shields.io/badge/-81c784?style=flat-square) | Deploy | `deploy`, `sign` |
-| ![Validate](https://img.shields.io/badge/-ffb74d?style=flat-square) | Validate | `validat`, `alert` |
-| ![Detect](https://img.shields.io/badge/-ff7043?style=flat-square) | Detect | `detect`, `determine`, `extract` |
-| ![Sync](https://img.shields.io/badge/-a177e9?style=flat-square) | Sync | `sync`, `drift`, `backfill` |
-| ![Test](https://img.shields.io/badge/-f06292?style=flat-square) | Test | `test` |
 | ![NuGet](https://img.shields.io/badge/-ffca28?style=flat-square) | NuGet | `nuget` |
-| ![Database](https://img.shields.io/badge/-388e3c?style=flat-square) | Database | `database` |
-| ![Template](https://img.shields.io/badge/-9e9e9e?style=flat-square) | Template | Unresolved template reference |
-| ![Generic](https://img.shields.io/badge/-c0866c?style=flat-square) | Generic | No keyword match (fallback) |
+| ![Generic](https://img.shields.io/badge/-9e9e9e?style=flat-square) | Generic | No keyword match (fallback) |
+| ![Template](https://img.shields.io/badge/-f5f5f5?style=flat-square) | Template / Unknown | Unresolved template reference (white on dark, black on light) |
 
 ---
 
@@ -149,7 +148,7 @@ Individual steps within jobs are color-coded by their left border:
 
 Switch between **System**, **Dark**, and **Light** from the toolbar. The choice is persisted per panel.
 
-![Light theme](img/_main-light.png)
+![Light theme](img/_azure-pipelines-light.png)
 
 ---
 

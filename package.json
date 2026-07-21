@@ -2,7 +2,7 @@
   "name": "azure-pipeline-viewer",
   "displayName": "Azure DevOps YAML Pipeline Viewer",
   "description": "Visualize Azure DevOps YAML pipelines as flowcharts with full template resolution",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "pires11d",
   "icon": "icon.png",
   "engines": {

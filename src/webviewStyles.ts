@@ -4,22 +4,22 @@ export function getStyles(): string {
 body {
   font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
   background: var(--vscode-editor-background, #1e1e1e);
-  color: var(--vscode-editor-foreground, #cccccc);
+  color: var(--vscode-editor-foreground, #d4d4d4);
   overflow: hidden; height: 100vh;
 }
 #app { display: flex; flex-direction: column; height: 100vh; }
 
 header {
   padding: 12px 20px;
-  background: var(--vscode-titleBar-activeBackground, #2d2d2d);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  background: var(--vscode-titleBar-activeBackground, #2d2d30);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   flex-shrink: 0;
 }
 header h1 { font-size: 16px; font-weight: 600; margin-bottom: 4px; display: inline; }
 header .pipeline-name { font-size: 12px; font-weight: 600; opacity: 0.6; margin-bottom: 4px; }
 header .meta { font-size: 12px; opacity: 0.7; display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
 header .meta span { display: inline-flex; align-items: center; gap: 4px; }
-.label { color: var(--vscode-descriptionForeground, #888); }
+.label { color: var(--vscode-descriptionForeground, #999999); }
 .template-type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 10px; vertical-align: middle; letter-spacing: 0.5px; border: 1px solid; }
 .template-type-badge.ttb-pipeline { background: #ef535020; color: #ef5350; border-color: #ef535040; }
 .template-type-badge.ttb-pipelineTemplate { background: #f0629220; color: #f06292; border-color: #f0629240; }
@@ -44,24 +44,24 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 #toolbar {
   padding: 6px 20px;
   background: var(--vscode-sideBar-background, #252526);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   display: flex; gap: 8px; flex-shrink: 0;
 }
 #toolbar button {
-  background: var(--vscode-button-secondaryBackground, #3a3d41);
-  color: var(--vscode-button-secondaryForeground, #ccc);
-  border: 1px solid var(--vscode-panel-border, #555);
+  background: var(--vscode-button-secondaryBackground, #3f3f46);
+  color: var(--vscode-button-secondaryForeground, #f1f1f1);
+  border: 1px solid var(--vscode-panel-border, #434346);
   padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
 }
 #toolbar button:hover {
   background: var(--vscode-button-secondaryHoverBackground, #505050);
 }
-.toolbar-sep { width: 1px; background: var(--vscode-panel-border, #444); align-self: stretch; margin: 2px 4px; }
-.toolbar-label { font-size: 11px; color: var(--vscode-descriptionForeground, #888); align-self: center; }
+.toolbar-sep { width: 1px; background: var(--vscode-panel-border, #3f3f46); align-self: stretch; margin: 2px 4px; }
+.toolbar-label { font-size: 11px; color: var(--vscode-descriptionForeground, #999999); align-self: center; }
 #themeSelect {
-  background: var(--vscode-dropdown-background, #3c3c3c);
-  color: var(--vscode-dropdown-foreground, #ccc);
-  border: 1px solid var(--vscode-dropdown-border, #555);
+  background: var(--vscode-dropdown-background, #333337);
+  color: var(--vscode-dropdown-foreground, #f1f1f1);
+  border: 1px solid var(--vscode-dropdown-border, #434346);
   border-radius: 4px; padding: 3px 6px; font-size: 12px; cursor: pointer;
 }
 
@@ -69,17 +69,17 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 #inspector-bar {
   padding: 6px 20px;
   background: var(--vscode-sideBar-background, #252526);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   display: flex; align-items: center; gap: 10px; flex-shrink: 0;
 }
 .inspector-label {
   font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
-  color: var(--vscode-descriptionForeground, #888); opacity: 0.6;
+  color: var(--vscode-descriptionForeground, #999999); opacity: 0.6;
 }
 .inspector-btn {
   background: transparent;
-  color: var(--vscode-descriptionForeground, #888);
-  border: 1px solid var(--vscode-panel-border, #555);
+  color: var(--vscode-descriptionForeground, #999999);
+  border: 1px solid var(--vscode-panel-border, #434346);
   padding: 4px 14px; border-radius: 4px; font-size: 12px; cursor: pointer;
   transition: box-shadow 0.2s ease, color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
@@ -101,47 +101,48 @@ header .meta span { display: inline-flex; align-items: center; gap: 4px; }
 /* ===== Theme Overrides ===== */
 body[data-theme="dark"] {
   --vscode-editor-background: #1e1e1e;
-  --vscode-editor-foreground: #cccccc;
-  --vscode-titleBar-activeBackground: #2d2d2d;
+  --vscode-editor-foreground: #d4d4d4;
+  --vscode-titleBar-activeBackground: #2d2d30;
   --vscode-sideBar-background: #252526;
-  --vscode-panel-border: #444;
-  --vscode-editorWidget-background: #2d2d2d;
-  --vscode-button-secondaryBackground: #3a3d41;
-  --vscode-button-secondaryForeground: #ccc;
-  --vscode-button-secondaryHoverBackground: #505050;
-  --vscode-descriptionForeground: #888;
+  --vscode-panel-border: #7c7c7c;
+  --vscode-editorWidget-background: #2d2d30;
+  --vscode-button-secondaryBackground: #3f3f46;
+  --vscode-button-secondaryForeground: #f1f1f1;
+  --vscode-button-secondaryHoverBackground: #007acc;
+  --vscode-descriptionForeground: #999999;
   --vscode-focusBorder: #007acc;
-  --vscode-dropdown-background: #3c3c3c;
-  --vscode-dropdown-foreground: #ccc;
-  --vscode-dropdown-border: #555;
+  --vscode-dropdown-background: #333337;
+  --vscode-dropdown-foreground: #f1f1f1;
+  --vscode-dropdown-border: #434346;
 }
 body[data-theme="light"] {
-  --vscode-editor-background: #ffffff;
+  --vscode-editor-background: #f5f5f5;
   --vscode-editor-foreground: #1e1e1e;
-  --vscode-titleBar-activeBackground: #f3f3f3;
-  --vscode-sideBar-background: #f0f0f0;
-  --vscode-panel-border: #d4d4d4;
-  --vscode-editorWidget-background: #f8f8f8;
-  --vscode-button-secondaryBackground: #e0e0e0;
-  --vscode-button-secondaryForeground: #333;
-  --vscode-button-secondaryHoverBackground: #d0d0d0;
-  --vscode-descriptionForeground: #666;
-  --vscode-focusBorder: #0078d4;
+  --vscode-titleBar-activeBackground: #dce0ec;
+  --vscode-sideBar-background: #e7e8ec;
+  --vscode-panel-border: #4d4d4d;
+  --vscode-editorWidget-background: #eeeef2;
+  --vscode-button-secondaryBackground: #d6d8e0;
+  --vscode-button-secondaryForeground: #1e1e1e;
+  --vscode-button-secondaryHoverBackground: #c9def5;
+  --vscode-descriptionForeground: #5a5d6e;
+  --vscode-focusBorder: #007acc;
   --vscode-dropdown-background: #ffffff;
-  --vscode-dropdown-foreground: #333;
-  --vscode-dropdown-border: #ccc;
+  --vscode-dropdown-foreground: #1e1e1e;
+  --vscode-dropdown-border: #bcbfd4;
 }
 /* Light theme badge and color overrides */
 body[data-theme="light"] .badge-build    { background: #4fc3f740; color: #0277bd; }
 body[data-theme="light"] .badge-deploy   { background: #81c78440; color: #2e7d32; }
-body[data-theme="light"] .badge-validate { background: #ffb74d40; color: #e65100; }
-body[data-theme="light"] .badge-detect   { background: #ff704340; color: #bf360c; }
+body[data-theme="light"] .badge-validate { background: #ff704340; color: #e65100; }
+body[data-theme="light"] .badge-detect   { background: #3d5afe40; color: #283593; }
 body[data-theme="light"] .badge-sync     { background: #b388ff40; color: #4a148c; }
-body[data-theme="light"] .badge-template { background: #9e9e9e40; color: #424242; }
-body[data-theme="light"] .badge-generic  { background: #d8af9340; color: #5d4037; }
+body[data-theme="light"] .badge-template { background: #21212140; color: #212121; }
+body[data-theme="light"] .badge-generic  { background: #9e9e9e40; color: #424242; }
 body[data-theme="light"] .badge-test     { background: #f0629240; color: #880e4f; }
 body[data-theme="light"] .badge-nuget    { background: #ffca2840; color: #f57f17; }
-body[data-theme="light"] .badge-database { background: #388e3c40; color: #1b5e20; }
+/* white template border is invisible on light bg -- flip it to black */
+body[data-theme="light"] .type-template  { border-left-color: #212121; }
 body[data-theme="light"] .badge-stage    { background: #ba68c840; color: #6a1b9a; }
 body[data-theme="light"] .template-type-badge.ttb-pipeline { background: #ef535030; color: #c62828; }
 body[data-theme="light"] .template-type-badge.ttb-pipelineTemplate { background: #f0629230; color: #880e4f; }
@@ -150,7 +151,7 @@ body[data-theme="light"] .template-type-badge.ttb-jobs { background: #9575cd30; 
 body[data-theme="light"] .template-type-badge.ttb-steps { background: #7986cb30; color: #283593; }
 body[data-theme="light"] .job-badge-job { background: #9575cd40; color: #4527a0; }
 body[data-theme="light"] .job-badge-deploy { background: #9575cd40; color: #4527a0; }
-body[data-theme="light"] .job-header:hover { background: #e0e0e0; }
+body[data-theme="light"] .job-header:hover { background: #c9def5; }
 body[data-theme="light"] .header-param-key { color: #0277bd; }
 body[data-theme="light"] .header-param-val.param-true { color: #2e7d32; }
 body[data-theme="light"] .header-param-val.param-false { color: #c62828; }
@@ -162,7 +163,23 @@ body[data-theme="light"] .sf-condition { color: #e65100; }
 body[data-theme="light"] .sf-tpl { color: #283593; }
 body[data-theme="light"] .job-header .job-nav { color: #283593; }
 body[data-theme="light"] .sn-open { color: #283593; }
-/* Light theme: darken the muted secondary text so it isn't washed out on white */
+/* Light theme: inspector buttons need real contrast against the bright background */
+body[data-theme="light"] .inspector-btn {
+  color: #5a5d6e;
+  border-color: #b0b3c5;
+  background: #dddfe8;
+}
+body[data-theme="light"] .inspector-btn:hover { background: #cfd2df; }
+body[data-theme="light"] .inspector-btn.ins-params.has-content { color: #1b7a3d; border-color: #2e9e5590; background: #d4edda; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-vars.has-content   { color: #0a5e8a; border-color: #1a8fc490; background: #d0eaf7; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-skip.has-content   { color: #8a6d00; border-color: #c9a80090; background: #f5ecc8; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-params.has-content:hover { background: #bfe0c8; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-vars.has-content:hover   { background: #b8ddef; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-skip.has-content:hover   { background: #ede2ae; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-params.is-open { background: #a8d5b3; border-color: #1b7a3d; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-vars.is-open   { background: #a3d3ea; border-color: #0a5e8a; box-shadow: none; }
+body[data-theme="light"] .inspector-btn.ins-skip.is-open   { background: #e5d899; border-color: #8a6d00; box-shadow: none; }
+/* Light theme: darken the muted secondary text so it isn't washed out */
 body[data-theme="light"] .sf-inputs-toggle,
 body[data-theme="light"] .header-params-toggle { color: #4e6470; }
 body[data-theme="light"] .meta { opacity: 0.9; }
@@ -190,8 +207,8 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 /* ===== Stage Nodes ===== */
 .stage-node {
   position: absolute; width: 280px;
-  background: var(--vscode-editorWidget-background, #2d2d2d);
-  border: 1px solid var(--vscode-panel-border, #555);
+  background: var(--vscode-editorWidget-background, #2d2d30);
+  border: 1px solid var(--vscode-panel-border, #434346);
   border-radius: 10px; border-left: 5px solid #ce93d8;
   cursor: pointer;
   transition: box-shadow 0.2s, width 0.3s ease, height 0.1s ease;
@@ -230,7 +247,7 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 .sn-open:hover { opacity: 1; text-decoration: underline; }
 .sn-footer {
   padding: 4px 12px 8px; font-size: 10px; opacity: 0.5;
-  border-top: 1px solid var(--vscode-panel-border, #444);
+  border-top: 1px solid var(--vscode-panel-border, #3f3f46);
 }
 .stage-node.expanded .sn-footer { display: none; }
 
@@ -246,25 +263,25 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 
 .type-build    { border-left-color: #4fc3f7; }
 .type-deploy   { border-left-color: #81c784; }
-.type-validate { border-left-color: #ffb74d; }
-.type-detect   { border-left-color: #ff7043; }
+.type-validate { border-left-color: #ff7043; }
+/* detect = marine blue, hue-equidistant between build (sky) and sync (violet) */
+.type-detect   { border-left-color: #3d5afe; }
 .type-sync     { border-left-color: #a177e9; }
-.type-template { border-left-color: #9e9e9e; }
-.type-generic  { border-left-color: #c0866c; }
+/* template = unresolved/unknown: stark white on dark so it stands out */
+.type-template { border-left-color: #f5f5f5; }
+.type-generic  { border-left-color: #9e9e9e; }
 .type-test     { border-left-color: #f06292; }
 .type-nuget    { border-left-color: #ffca28; }
-.type-database { border-left-color: #388e3c; }
 
 .badge-build    { background: #4fc3f720; color: #4fc3f7; }
 .badge-deploy   { background: #81c78420; color: #81c784; }
-.badge-validate { background: #ffb74d20; color: #ffb74d; }
-.badge-detect   { background: #ff704320; color: #ff7043; }
+.badge-validate { background: #ff704320; color: #ff7043; }
+.badge-detect   { background: #3d5afe20; color: #3d5afe; }
 .badge-sync     { background: #b388ff20; color: #a177e9; }
-.badge-template { background: #9e9e9e20; color: #9e9e9e; }
-.badge-generic  { background: #d8af9320; color: #c0866c; }
+.badge-template { background: #f5f5f520; color: #f5f5f5; }
+.badge-generic  { background: #9e9e9e20; color: #9e9e9e; }
 .badge-test     { background: #f0629220; color: #f06292; }
 .badge-nuget    { background: #ffca2820; color: #ffca28; }
-.badge-database { background: #388e3c20; color: #388e3c; }
 
 .cond-label {
   font-size: 10px; color: #ffb74d;
@@ -283,14 +300,14 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 /* ===== Expanded Inner Content ===== */
 .stage-inner {
   display: none; padding: 6px 10px 10px;
-  border-top: 1px solid var(--vscode-panel-border, #444);
+  border-top: 1px solid var(--vscode-panel-border, #3f3f46);
 }
 .stage-node.expanded .stage-inner { display: block; }
 
 /* Job cards inside a stage */
 .job-card {
   margin: 6px 0; border-radius: 8px;
-  border: 1px solid var(--vscode-panel-border, #444);
+  border: 1px solid var(--vscode-panel-border, #3f3f46);
   background: var(--vscode-editor-background, #1e1e1e);
   overflow: hidden; cursor: pointer;
 }
@@ -298,9 +315,9 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 .job-header {
   padding: 7px 10px; font-size: 12px; font-weight: 600;
   display: flex; align-items: center; gap: 6px; cursor: pointer;
-  background: var(--vscode-titleBar-activeBackground, #2d2d2d);
+  background: var(--vscode-titleBar-activeBackground, #2d2d30);
 }
-.job-header:hover { background: #3a3d41; }
+.job-header:hover { background: #3f3f46; }
 .job-badge {
   font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700;
   flex-shrink: 0;
@@ -338,15 +355,15 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 }
 .step-flow-dot {
   width: 8px; height: 8px; border-radius: 50%;
-  border: 2px solid #555; background: var(--vscode-editor-background, #1e1e1e);
+  border: 2px solid #434346; background: var(--vscode-editor-background, #1e1e1e);
   flex-shrink: 0; z-index: 1;
 }
-.step-flow-line { width: 2px; flex: 1; background: #444; }
+.step-flow-line { width: 2px; flex: 1; background: #3f3f46; }
 .step-flow-card {
   flex: 1; padding: 5px 8px; margin-left: 6px;
   border-radius: 5px; font-size: 11px;
-  border-left: 3px solid #555;
-  background: var(--vscode-editorWidget-background, #2d2d2d);
+  border-left: 3px solid #434346;
+  background: var(--vscode-editorWidget-background, #2d2d30);
   display: flex; flex-direction: column; gap: 1px;
   margin-top: 2px; margin-bottom: 2px;
 }
@@ -356,7 +373,7 @@ body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 .stage-node .sf-tpl, .job-card .sf-tpl { font-size: 10px; color: #7986cb; word-break: break-all; padding: 2px 12px 4px; display: block; }
 .stage-node .sf-inputs, .job-card .sf-inputs { padding: 2px 12px 4px; }
 .sf-tpl-label { color: #90a4ae; }
-body[data-theme="light"] .sf-tpl-label { color: #666; }
+body[data-theme="light"] .sf-tpl-label { color: #717171; }
 .sf-type-label { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px; margin-bottom: 2px; display: inline-block; }
 .sf-label-step { background: #7986cb20; color: #7986cb; }
 .sf-label-task { background: #42a5f520; color: #42a5f5; }
@@ -423,15 +440,15 @@ svg.connectors {
   pointer-events: none; overflow: visible;
 }
 svg.connectors path {
-  fill: none; stroke: var(--vscode-panel-border, #555); stroke-width: 2;
+  fill: none; stroke: var(--vscode-panel-border, #434346); stroke-width: 2;
 }
-svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
+svg.connectors polygon { fill: var(--vscode-panel-border, #434346); }
 
 /* ===== Callers Panel ===== */
 .callers-panel {
   padding: 8px 20px;
   background: var(--vscode-sideBar-background, #252526);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   font-size: 12px; max-height: 200px; overflow-y: auto;
 }
 .callers-panel.hidden { display: none; }
@@ -440,7 +457,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
   padding: 3px 6px; cursor: pointer; border-radius: 4px;
   display: flex; align-items: center; gap: 8px;
 }
-.callers-panel .caller-item:hover { background: var(--vscode-button-secondaryBackground, #3a3d41); }
+.callers-panel .caller-item:hover { background: var(--vscode-button-secondaryBackground, #3f3f46); }
 .callers-panel .caller-name { font-weight: 500; }
 .callers-panel .caller-path { font-size: 10px; opacity: 0.6; font-family: monospace; }
 .callers-panel .callers-empty { opacity: 0.5; font-style: italic; }
@@ -453,7 +470,7 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 .param-panel {
   padding: 10px 20px;
   background: var(--vscode-sideBar-background, #252526);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   font-size: 12px; max-height: 260px; overflow-y: auto; flex-shrink: 0;
 }
 .param-panel.hidden { display: none; }
@@ -461,28 +478,28 @@ svg.connectors polygon { fill: var(--vscode-panel-border, #555); }
 .pp-hint { font-weight: 400; opacity: 0.55; margin-left: 8px; font-size: 11px; }
 .pp-grid { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .pp-item { display: flex; align-items: center; gap: 8px; min-width: 220px; }
-.pp-label { color: var(--vscode-editor-foreground, #ccc); cursor: pointer; }
+.pp-label { color: var(--vscode-editor-foreground, #d4d4d4); cursor: pointer; }
 .pp-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #81c784; order: -1; }
 .pp-item select, .pp-item input[type="text"] {
-  background: var(--vscode-dropdown-background, #3c3c3c);
-  color: var(--vscode-dropdown-foreground, #ccc);
-  border: 1px solid var(--vscode-dropdown-border, #555);
+  background: var(--vscode-dropdown-background, #333337);
+  color: var(--vscode-dropdown-foreground, #f1f1f1);
+  border: 1px solid var(--vscode-dropdown-border, #434346);
   border-radius: 4px; padding: 2px 6px; font-size: 12px; margin-left: auto;
 }
 .pp-actions { margin-top: 10px; }
 .pp-reset {
-  background: var(--vscode-button-secondaryBackground, #3a3d41);
-  color: var(--vscode-button-secondaryForeground, #ccc);
-  border: 1px solid var(--vscode-panel-border, #555);
+  background: var(--vscode-button-secondaryBackground, #3f3f46);
+  color: var(--vscode-button-secondaryForeground, #f1f1f1);
+  border: 1px solid var(--vscode-panel-border, #434346);
   padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;
 }
-.pp-reset:hover { background: var(--vscode-button-secondaryHoverBackground, #505050); }
+.pp-reset:hover { background: var(--vscode-button-secondaryHoverBackground, #3e3e40); }
 
 /* ===== Skipped Stages Panel ===== */
 .skipped-panel {
   padding: 8px 20px;
   background: var(--vscode-sideBar-background, #252526);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   font-size: 12px; max-height: 200px; overflow-y: auto; flex-shrink: 0;
 }
 .skipped-panel.hidden { display: none; }
@@ -505,7 +522,7 @@ body[data-theme="light"] .skipped-reason { color: #c62828; }
 .vars-panel {
   padding: 8px 20px;
   background: var(--vscode-sideBar-background, #252526);
-  border-bottom: 1px solid var(--vscode-panel-border, #444);
+  border-bottom: 1px solid var(--vscode-panel-border, #3f3f46);
   font-size: 12px; max-height: 220px; overflow-y: auto; flex-shrink: 0;
 }
 .vars-panel.hidden { display: none; }

@@ -651,11 +651,11 @@ export function getScript(): string {
   // Pure canvas drawing (no external image) so toDataURL stays untainted.
   function colorForType(t) {
     var map = {
-      build: '#4fc3f7', deploy: '#81c784', validate: '#ffb74d', detect: '#ff7043',
-      sync: '#a177e9', template: '#9e9e9e', generic: '#c0866c', test: '#f06292',
-      nuget: '#ffca28', database: '#388e3c'
+      build: '#4fc3f7', deploy: '#81c784', validate: '#ff7043', detect: '#3d5afe',
+      sync: '#a177e9', template: '#f5f5f5', generic: '#9e9e9e', test: '#f06292',
+      nuget: '#ffca28'
     };
-    return map[t] || '#c0866c';
+    return map[t] || '#9e9e9e';
   }
 
   function roundRectPath(ctx, x, y, w, h, r) {

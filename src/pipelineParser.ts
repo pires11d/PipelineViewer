@@ -796,6 +796,25 @@ export class PipelineParser {
     if (atIdx > 0) {
       const tplPath = ref.substring(0, atIdx);
       const alias = ref.substring(atIdx + 1);
+
+      // 'self' is ADO's built-in alias for the repository the pipeline lives
+      // in. It needs no resources entry, so it never lands in repoMappings --
+      // without this branch a same-repo template written as foo.yml@self falls
+      // through to null and renders [Unresolved]. Alias-qualified paths are
+      // resolved relative to the repo ROOT, not the current file, so find the
+      // repo root (nearest .git ancestor) and join there; fall back to a
+      // file-relative resolve if we can't locate a root.
+      if (alias === 'self') {
+        const repoRoot = this.findRepoRoot(currentDir);
+        const candidates: string[] = [];
+        if (repoRoot) { candidates.push(path.join(repoRoot, tplPath)); }
+        candidates.push(path.resolve(currentDir, tplPath));
+        for (const c of candidates) {
+          if (fs.existsSync(c)) { return c; }
+        }
+        return null;
+      }
+
       const mappedRoot = this.repoMappings.get(alias);
       if (mappedRoot) {
         const full = path.join(mappedRoot, tplPath);
@@ -808,6 +827,20 @@ export class PipelineParser {
     const resolved = path.resolve(currentDir, ref);
     if (fs.existsSync(resolved)) { return resolved; }
 
+    return null;
+  }
+
+  // Walk up from a starting directory to the repository root, identified by a
+  // .git entry. Used to resolve @self template paths, which ADO treats as
+  // relative to the repo root rather than the referencing file.
+  private findRepoRoot(startDir: string): string | null {
+    let dir = startDir;
+    for (let i = 0; i < 40; i++) {
+      if (fs.existsSync(path.join(dir, '.git'))) { return dir; }
+      const parent = path.dirname(dir);
+      if (parent === dir) { break; }
+      dir = parent;
+    }
     return null;
   }
 
@@ -1149,13 +1182,13 @@ export class PipelineParser {
   private inferStageType(name: string, displayName: string): StageNode['type'] {
     const combined = `${name} ${displayName}`.toLowerCase();
     if (combined.includes('nuget')) { return 'nuget'; }
-    if (combined.includes('database')) { return 'database'; }
     if (combined.includes('deploy') || combined.includes('sign')) { return 'deploy'; }
     if (combined.includes('build') || combined.includes('restore')) { return 'build'; }
-    if (combined.includes('validat') || combined.includes('alert')) { return 'validate'; }
+    if (combined.includes('validat') || combined.includes('check')) { return 'validate'; }
     if (combined.includes('test')) { return 'test'; }
     if (combined.includes('detect') || combined.includes('determine') || combined.includes('extract')) { return 'detect'; }
-    if (combined.includes('sync') || combined.includes('drift') || combined.includes('backfill')) { return 'sync'; }
+    if (combined.includes('sync') || combined.includes('drift') || combined.includes('backfill') ||
+        combined.includes('refresh') || combined.includes('recovery')) { return 'sync'; }
     return 'generic';
   }
 

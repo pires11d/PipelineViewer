@@ -14,16 +14,19 @@ out across environments.
 
 ```
 Pires.CheckoutService/
-  azure-pipelines.yml                     <- open this one
+  azure-pipelines.yml               <- wrapper (open this one)
 Pires.PipelineTemplates/
   templates/
-    pipelines/service-deploy-pipeline.yml <- orchestrator (extended by the wrapper)
+    pipelines/
+      service-deploy-pipeline.yml   <- orchestrator (extended by the wrapper)
     stages/
       environments/
-        dev.yml  stg.yml  prd.yml      <- each calls the shared deploy stage
+        dev.yml                     <- each calls the shared deploy stage  
+        stg.yml                     <- each calls the shared deploy stage  
+        prd.yml                     <- each calls the shared deploy stage
       build-and-test-stage.yml
       integration-tests-stage.yml
-      deploy-environment-stage.yml        <- shared by every environment
+      deploy-environment-stage.yml  <- shared by every environment
     steps/
       restore-and-build-steps.yml
       run-unit-tests-steps.yml
@@ -34,8 +37,13 @@ Pires.PipelineTemplates/
 ```
 
 Resolution nests four levels deep:
-`azure-pipelines` → `service-deploy-pipeline` → `environments/*` →
-`deploy-environment-stage` → step templates.
+```
+`azure-pipelines` 
+|--→ `service-deploy-pipeline` 
+  |--→ `environments/*` 
+    |--→ `deploy-environment-stage` 
+      |--→ step templates
+```
 
 ## Things to try
 

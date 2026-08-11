@@ -216,7 +216,7 @@ export class PipelineViewerPanel {
     <button id="btnResetZoom" title="Reset Zoom">Reset</button>
     <button id="btnOpenSource" title="Open YAML source file">View Source</button>
     <button id="btnCalledBy" title="Find pipelines that reference this file">Called By</button>
-    <button id="btnExportPng" title="Export the diagram as a PNG image">Export PNG</button>
+    <button id="btnExportPng" title="Export the diagram as a PNG image">Export As Image</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="themeSelect">Theme:</label>
     <select id="themeSelect" title="Color theme">

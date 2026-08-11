@@ -693,32 +693,219 @@ export function getScript(): string {
     ctx.fill();
   }
 
+  // Step label / color mirrors the on-screen step cards.
+  function stepColorFor(t) {
+    if (t === 'template') return '#7986cb';
+    if (t === 'task' || t === 'cmd' || t === 'sonarqube') return '#42a5f5';
+    if (t === 'checkout') return '#81c784';
+    return '#b39ddb'; // script / powershell / bash
+  }
+  function stepLabelFor(t) {
+    if (t === 'template' || t === 'checkout') return 'STEP';
+    if (t === 'task' || t === 'cmd' || t === 'sonarqube') return 'TASK';
+    if (t === 'powershell') return 'POWERSHELL';
+    if (t === 'bash') return 'BASH';
+    return 'SCRIPT';
+  }
+  function stepLabelColor(t) {
+    if (t === 'task' || t === 'cmd' || t === 'sonarqube') return '#42a5f5';
+    if (t === 'powershell' || t === 'script' || t === 'bash') return '#b39ddb';
+    return '#7986cb';
+  }
+  function isTaskish(t) { return t === 'task' || t === 'cmd' || t === 'sonarqube'; }
+
+  // Draw the diagram to a canvas, mirroring the on-screen cards: pills, a
+  // step-flow rail with colored dots, per-step cards, task-id badges and the
+  // resolved tasks nested inside step templates. Expanded stages (matching what
+  // the user opened) draw their full contents; collapsed ones draw a summary.
   function renderPng() {
     if (!lo) return null;
-    var W = 280, HH = 92, HG = 80, VG = 42, PADp = 40, scale = 2;
-    var pos = {}, maxX = 0, maxY = 0;
-    for (var c = 0; c <= lo.maxLayer; c++) {
-      var colStages = lo.groups[c] || [];
-      for (var ri = 0; ri < colStages.length; ri++) {
-        var s = colStages[ri];
-        var x = PADp + c * (W + HG), y = PADp + ri * (HH + VG);
-        pos[s.name] = { x: x, y: y, w: W, h: HH };
-        maxX = Math.max(maxX, x + W); maxY = Math.max(maxY, y + HH);
-      }
-    }
-    var cw = Math.max(maxX + PADp, 400), ch = Math.max(maxY + PADp, 160);
-    var cv = document.createElement('canvas');
-    cv.width = Math.ceil(cw * scale); cv.height = Math.ceil(ch * scale);
-    var ctx = cv.getContext('2d');
-    ctx.scale(scale, scale);
+    var COL_GAP = 80, ROW_GAP = 36, PAD = 40, scale = 2;
     var bs = getComputedStyle(document.body);
-    ctx.fillStyle = bs.backgroundColor || '#1e1e1e';
-    ctx.fillRect(0, 0, cw, ch);
+    var pageBg = bs.backgroundColor || '#1e1e1e';
     var textColor = bs.color || '#cccccc';
     var sample = document.querySelector('.stage-node');
-    var nodeBg = sample ? getComputedStyle(sample).backgroundColor : '#2d2d2d';
+    var stageBg = sample ? getComputedStyle(sample).backgroundColor : '#2d2d2d';
     var borderCol = sample ? getComputedStyle(sample).borderTopColor : '#555555';
+    var jobBg = pageBg;   // job cards sit on the editor background, like the UI
+    var stepBg = stageBg; // step cards match the widget background
 
+    var cv = document.createElement('canvas');
+    var ctx = cv.getContext('2d');
+
+    // -- Drawing primitives (closures over ctx/colors) --
+    function pill(x, y, text, fg, bg, draw) {
+      ctx.font = '700 9px "Segoe UI",sans-serif';
+      var w = ctx.measureText(text).width + 10, h = 14;
+      if (draw) {
+        roundRectPath(ctx, x, y, w, h, 3);
+        ctx.fillStyle = bg; ctx.fill();
+        ctx.fillStyle = fg; ctx.textBaseline = 'middle';
+        ctx.fillText(text, x + 5, y + h / 2 + 0.5);
+        ctx.textBaseline = 'alphabetic';
+      }
+      return w;
+    }
+
+    // Returns consumed height; draws only when draw is true (same math in both
+    // passes, so measure and draw always agree).
+    function drawStep(x, y, w, st, draw) {
+      var pad = 6, yy = y + pad, ix = x + 8;
+      var lc = stepLabelColor(st.type);
+      if (draw) {
+        var pw = pill(ix, yy, stepLabelFor(st.type), lc, lc + '22', true);
+        ctx.font = '600 11px "Segoe UI",sans-serif'; ctx.fillStyle = textColor;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fitText(ctx, st.displayName || st.name, w - 8 - pw - 6 - 8), ix + pw + 6, yy + 7);
+        ctx.textBaseline = 'alphabetic';
+      }
+      yy += 18;
+      if (isTaskish(st.type) && st.name) {
+        if (draw) {
+          ctx.font = '9px monospace';
+          var bw = Math.min(ctx.measureText(st.name).width + 10, w - 16);
+          roundRectPath(ctx, ix, yy, bw, 14, 3); ctx.fillStyle = '#42a5f522'; ctx.fill();
+          ctx.fillStyle = '#64b5f6'; ctx.textBaseline = 'middle';
+          ctx.fillText(fitText(ctx, st.name, w - 26), ix + 5, yy + 7);
+          ctx.textBaseline = 'alphabetic';
+        }
+        yy += 17;
+      }
+      (st.childSteps || []).forEach(function(cs) {
+        if (draw) {
+          ctx.fillStyle = stepColorFor(cs.type);
+          ctx.beginPath(); ctx.arc(ix + 3, yy + 7, 2.5, 0, 6.2832); ctx.fill();
+          ctx.font = '10px "Segoe UI",sans-serif'; ctx.fillStyle = textColor; ctx.globalAlpha = 0.85;
+          ctx.fillText(fitText(ctx, cs.displayName || cs.name, w - 28), ix + 12, yy + 9);
+          ctx.globalAlpha = 1;
+        }
+        yy += 15;
+      });
+      return (yy - y) + pad;
+    }
+
+    function drawJob(x, y, w, j, draw) {
+      var pad = 8, yy = y + pad;
+      if (draw) {
+        var pw = pill(x + pad, yy, 'JOB', '#b39ddb', '#9575cd22', true);
+        ctx.font = '600 12px "Segoe UI",sans-serif'; ctx.fillStyle = textColor;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fitText(ctx, (j.displayName || j.name) + (j.isDeployment ? '  (deployment)' : ''), w - pad * 2 - pw - 8), x + pad + pw + 6, yy + 7);
+        ctx.textBaseline = 'alphabetic';
+      }
+      yy += 22;
+      if (j.environment) {
+        if (draw) {
+          ctx.font = '9px "Segoe UI",sans-serif'; ctx.globalAlpha = 0.6; ctx.fillStyle = textColor;
+          ctx.fillText('env: ' + j.environment, x + pad + 2, yy + 2); ctx.globalAlpha = 1;
+        }
+        yy += 14;
+      }
+      var steps = j.steps || [], sx = x + pad + 18, sw = w - pad * 2 - 18, railX = x + pad + 7, prevDotY = null;
+      steps.forEach(function(st) {
+        var sh = drawStep(sx, yy, sw, st, false);
+        var dotY = yy + 9;
+        if (draw) {
+          roundRectPath(ctx, sx, yy, sw, sh, 5); ctx.fillStyle = stepBg; ctx.fill();
+          ctx.strokeStyle = borderCol; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
+          ctx.save(); roundRectPath(ctx, sx, yy, sw, sh, 5); ctx.clip();
+          ctx.fillStyle = stepColorFor(st.type); ctx.fillRect(sx, yy, 3, sh); ctx.restore();
+          if (prevDotY !== null) {
+            ctx.strokeStyle = borderCol; ctx.globalAlpha = 0.5; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(railX, prevDotY); ctx.lineTo(railX, dotY); ctx.stroke(); ctx.globalAlpha = 1;
+          }
+          ctx.fillStyle = stepColorFor(st.type);
+          ctx.beginPath(); ctx.arc(railX, dotY, 3.5, 0, 6.2832); ctx.fill();
+          drawStep(sx, yy, sw, st, true);
+        }
+        prevDotY = dotY;
+        yy += sh + 6;
+      });
+      return (yy - (steps.length ? 6 : 0) - y) + pad;
+    }
+
+    function drawStageBody(x, y, w, s, expanded, draw) {
+      var pad = 14, col = colorForType(s.type), yy = y + pad, cx = x + pad + 4;
+      if (draw) {
+        var w1 = pill(cx, yy, 'STAGE', '#ce93d8', '#ba68c822', true);
+        pill(cx + w1 + 5, yy, s.type.toUpperCase(), col, col + '22', true);
+      }
+      yy += 20;
+      if (draw) {
+        ctx.font = '600 14px "Segoe UI",sans-serif'; ctx.fillStyle = textColor;
+        ctx.fillText(fitText(ctx, stageTitle(s), w - pad * 2 - 8), cx, yy + 4);
+      }
+      yy += 22;
+      if (s.isConditional && s.conditionalExpr) {
+        if (draw) {
+          ctx.font = '9px monospace'; ctx.fillStyle = '#ffb74d';
+          ctx.fillText(fitText(ctx, 'if: ' + s.conditionalExpr, w - pad * 2 - 8), cx, yy + 2);
+        }
+        yy += 15;
+      }
+      var jobs = s.jobs || [];
+      if (!expanded) {
+        var sc = jobs.reduce(function(a, j) { return a + ((j.steps || []).length); }, 0);
+        if (draw) {
+          ctx.font = '10px "Segoe UI",sans-serif'; ctx.globalAlpha = 0.55; ctx.fillStyle = textColor;
+          ctx.fillText(jobs.length + ' job(s), ' + sc + ' step(s)', cx, yy + 4); ctx.globalAlpha = 1;
+        }
+        yy += 18;
+        return (yy - y) + pad;
+      }
+      yy += 6;
+      if (draw) {
+        ctx.strokeStyle = borderCol; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + pad, yy); ctx.lineTo(x + w - pad, yy); ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      yy += 8;
+      jobs.forEach(function(j) {
+        var jh = drawJob(x + pad, yy, w - pad * 2, j, false);
+        if (draw) {
+          roundRectPath(ctx, x + pad, yy, w - pad * 2, jh, 8); ctx.fillStyle = jobBg; ctx.fill();
+          ctx.strokeStyle = borderCol; ctx.globalAlpha = 0.6; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
+          drawJob(x + pad, yy, w - pad * 2, j, true);
+        }
+        yy += jh + 8;
+      });
+      return (yy - (jobs.length ? 8 : 0) - y) + pad;
+    }
+
+    // -- Measure boxes honoring expand state --
+    var boxes = {};
+    stages.forEach(function(s) {
+      var expanded = !!expandedStages[s.name];
+      var w = expanded ? 480 : 300;
+      var h = drawStageBody(0, 0, w, s, expanded, false);
+      boxes[s.name] = { w: w, h: h };
+    });
+
+    // -- Column layout (widest box per column) --
+    var colX = [], xCursor = PAD;
+    for (var c = 0; c <= lo.maxLayer; c++) {
+      colX[c] = xCursor;
+      var maxW = 300;
+      (lo.groups[c] || []).forEach(function(s) { maxW = Math.max(maxW, boxes[s.name].w); });
+      xCursor += maxW + COL_GAP;
+    }
+    var pos = {}, maxX = 0, maxY = 0;
+    for (var c2 = 0; c2 <= lo.maxLayer; c2++) {
+      var y = PAD;
+      (lo.groups[c2] || []).forEach(function(s) {
+        var b = boxes[s.name];
+        pos[s.name] = { x: colX[c2], y: y, w: b.w, h: b.h };
+        y += b.h + ROW_GAP;
+        maxX = Math.max(maxX, colX[c2] + b.w);
+        maxY = Math.max(maxY, y);
+      });
+    }
+
+    var cw = Math.max(maxX + PAD, 400), ch = Math.max(maxY + PAD, 160);
+    cv.width = Math.ceil(cw * scale); cv.height = Math.ceil(ch * scale);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = pageBg; ctx.fillRect(0, 0, cw, ch);
+
+    // -- Connectors --
     ctx.strokeStyle = borderCol; ctx.fillStyle = borderCol; ctx.lineWidth = 2;
     stages.forEach(function(s) {
       var to = pos[s.name];
@@ -729,32 +916,18 @@ export function getScript(): string {
       });
     });
 
+    // -- Stage boxes + contents --
     stages.forEach(function(s) {
       var p = pos[s.name];
       if (!p) return;
       roundRectPath(ctx, p.x, p.y, p.w, p.h, 10);
-      ctx.fillStyle = nodeBg; ctx.fill();
+      ctx.fillStyle = stageBg; ctx.fill();
       ctx.strokeStyle = borderCol; ctx.lineWidth = 1; ctx.stroke();
-      var col = colorForType(s.type);
       ctx.save();
-      roundRectPath(ctx, p.x, p.y, p.w, p.h, 10);
-      ctx.clip();
-      ctx.fillStyle = col; ctx.fillRect(p.x, p.y, 5, p.h);
+      roundRectPath(ctx, p.x, p.y, p.w, p.h, 10); ctx.clip();
+      ctx.fillStyle = colorForType(s.type); ctx.fillRect(p.x, p.y, 5, p.h);
       ctx.restore();
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = textColor; ctx.font = '600 13px "Segoe UI",sans-serif';
-      ctx.fillText(fitText(ctx, stageTitle(s), p.w - 26), p.x + 16, p.y + 26);
-      ctx.fillStyle = col; ctx.font = '700 9px "Segoe UI",sans-serif';
-      ctx.fillText(s.type.toUpperCase(), p.x + 16, p.y + 44);
-      if (s.isConditional && s.conditionalExpr) {
-        ctx.fillStyle = '#ffb74d'; ctx.font = '9px monospace';
-        ctx.fillText(fitText(ctx, 'if: ' + s.conditionalExpr, p.w - 26), p.x + 16, p.y + 60);
-      }
-      var jobs = s.jobs || [];
-      var steps = jobs.reduce(function(a, j) { return a + (j.steps ? j.steps.length : 0); }, 0);
-      ctx.fillStyle = textColor; ctx.globalAlpha = 0.55; ctx.font = '10px "Segoe UI",sans-serif';
-      ctx.fillText(jobs.length + ' job(s), ' + steps + ' step(s)', p.x + 16, p.y + p.h - 14);
-      ctx.globalAlpha = 1;
+      drawStageBody(p.x, p.y, p.w, s, !!expandedStages[s.name], true);
     });
     return cv.toDataURL('image/png');
   }

@@ -14,7 +14,7 @@ Every diagram opens with a compact header that tells you where you are at a glan
 
 - **Breadcrumb + file name** with a colored [type badge](#template-type-hierarchy) (Pipeline, Stage Template, and so on).
 - **Meta line** — trigger, PR trigger, agent pool, and stage count.
-- **Action toolbar** — Expand / Collapse All, zoom, Reset, **View Source**, **Called By**, **Export PNG**, and the theme selector.
+- **Action toolbar** — Expand / Collapse All, zoom, Reset, **View Source**, **Called By**, **Export As Image**, and the theme selector.
 - **Inspect row** — three panel toggles: **Parameters**, **Variables**, and **Skipped**. Each one lights up in its own color when it has something to show, and stays dimmed when it doesn't — so you can tell at a glance whether a pipeline has run parameters, variable groups, or skipped stages before you click. They start closed to keep the view clean.
 
 ## Features
@@ -55,7 +55,7 @@ See every **variable group** referenced anywhere in the resolved template tree �
 ![Variable groups](img/_variables.png)
 
 ### Export & navigation
-- **Export PNG** — save the diagram as an image straight from the toolbar
+- **Export As Image** — save the diagram as an image straight from the toolbar; expanded stages export with their jobs, steps, and resolved tasks, so the image matches what you've opened on screen
 - Click any template reference (stage, job, or step) to navigate into its resolved template in a new panel
 - Navigated template files are revealed in the Explorer sidebar
 - Right-click any `.yml` / `.yaml` file in the Explorer, or use the editor title-bar button, to visualize it
@@ -65,7 +65,7 @@ See every **variable group** referenced anywhere in the resolved template tree �
 - **Zoom In (+) / Zoom Out (-) / Reset** — scale the flowchart from 30% to 200%
 - **View Source** — jump straight to the YAML source file in the editor
 - **Called By** — find pipelines across the workspace that reference the current file
-- **Export PNG** — export the diagram as an image
+- **Export As Image** — export the diagram as an image
 - **Theme** — switch between System, Dark, and Light (persisted per panel)
 - **Inspect row** — **Parameters**, **Variables**, and **Skipped** toggles, each color-lit when it has content and dimmed when empty; they start closed
 

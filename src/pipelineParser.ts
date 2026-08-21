@@ -112,6 +112,10 @@ export class PipelineParser {
   private originalDeps: Map<string, string> = new Map();
   private variableGroups: Set<string> = new Set();
   private idCounter = 0;
+  // Effective parameter values of the file whose stages are being parsed. Used
+  // to decide which branch of a conditional block inside a caller's
+  // 'parameters:' wins. Swapped when descending into a nested template.
+  private ctxParams: Record<string, any> = {};
 
   constructor(workspaceFolders: string[], manualMappings: Record<string, string>, maxDepth: number) {
     this.workspaceFolders = workspaceFolders;
@@ -126,6 +130,7 @@ export class PipelineParser {
   parse(filePath: string): PipelineModel {
     this.originalDeps.clear();
     this.variableGroups.clear();
+    this.ctxParams = {};
     const raw = fs.readFileSync(filePath, 'utf-8');
     const preprocessed = this.flattenConditionalArrayItems(raw);
     const content = this.deduplicateConditionalKeys(preprocessed);
@@ -196,6 +201,11 @@ export class PipelineParser {
         if (tplDoc && Array.isArray(tplDoc.parameters)) {
           model.parameters = this.parseParams(tplDoc.parameters);
         }
+        // Context for conditional blocks inside the template's own stage list.
+        const callerStr: Record<string, string> = {};
+        for (const [k, v] of Object.entries(model.callerParams)) { callerStr[k] = this.str(v); }
+        this.ctxParams = this.buildTemplateEffectiveParams(resolved, callerStr);
+
         this.visited.add(resolved.toLowerCase());
         model.stages = this.parseFileForStages(resolved, 1);
         this.visited.delete(resolved.toLowerCase());
@@ -203,6 +213,11 @@ export class PipelineParser {
         model.stages = [this.unresolvedStage(tplRef)];
       }
     } else if (doc.stages) {
+      for (const prm of rootParams) {
+        if (prm.default !== undefined && prm.default !== null && prm.default !== '') {
+          this.ctxParams[prm.name] = this.str(prm.default);
+        }
+      }
       const parsedStages = this.parseStages(doc.stages, dir, 0);
       // Determine if this is a standalone pipeline or a template:
       // Standalone pipelines have trigger/pr/pool at root level (even if set to 'none').
@@ -328,18 +343,24 @@ export class PipelineParser {
     if (!Array.isArray(items)) { return []; }
     const stages: StageNode[] = [];
 
+    // Bodies of the if/elseif conditions seen so far in THIS list, so an
+    // 'elseif'/'else' sibling can be expressed as a negation of them.
+    const chain: string[] = [];
+
     for (const item of items) {
       if (!item || typeof item !== 'object') { continue; }
 
       // STRUCTURAL KEYS FIRST -- a stage with conditional properties
       // (e.g. ${{ if }}: dependsOn) must not be mistaken for a wrapper
       if (item.stage) {
+        chain.length = 0;
         const stage = this.buildStage(item, dir, depth);
         stages.push(stage);
         continue;
       }
 
       if (item.template) {
+        chain.length = 0;
         stages.push(...this.resolveStageTemplate(item, dir, depth));
         continue;
       }
@@ -348,32 +369,68 @@ export class PipelineParser {
       const condKey = this.findConditionalKey(item);
       if (condKey) {
         const innerItems = item[condKey];
+        const cond = this.chainCondition(this.extractCondition(condKey), chain);
         if (Array.isArray(innerItems)) {
           const condStages = this.parseStages(innerItems, dir, depth);
-          for (const s of condStages) {
-            s.isConditional = true;
-            s.conditionalExpr = this.extractCondition(condKey);
-          }
+          this.applyCondition(condStages, cond);
           stages.push(...condStages);
         } else if (innerItems && typeof innerItems === 'object' && innerItems.template) {
           const tplStages = this.resolveStageTemplate(innerItems, dir, depth);
-          for (const s of tplStages) {
-            s.isConditional = true;
-            s.conditionalExpr = this.extractCondition(condKey);
-          }
+          this.applyCondition(tplStages, cond);
           stages.push(...tplStages);
         } else if (innerItems && typeof innerItems === 'object' && innerItems.stage) {
           const condStages = this.parseStages([innerItems], dir, depth);
-          for (const s of condStages) {
-            s.isConditional = true;
-            s.conditionalExpr = this.extractCondition(condKey);
-          }
+          this.applyCondition(condStages, cond);
           stages.push(...condStages);
         }
         continue;
       }
     }
     return stages;
+  }
+
+  // Nested ${{ if }} wrappers: the recursive parse has already stamped the
+  // INNER condition, so AND the two. Overwriting let the outer gate win, and a
+  // stage its inner gate excluded still rendered (backfill's PROD extract).
+  private applyCondition(stages: StageNode[], outer: string): void {
+    const body = (e: string) => e.replace(/^if\s+/, '').trim();
+    for (const s of stages) {
+      if (s.isConditional && s.conditionalExpr && body(s.conditionalExpr) !== body(outer)) {
+        s.conditionalExpr = 'if and(' + body(outer) + ', ' + body(s.conditionalExpr) + ')';
+      } else {
+        s.conditionalExpr = outer;
+      }
+      s.isConditional = true;
+    }
+  }
+
+  // Turn 'if X' / 'elseif Y' / 'else' into a self-contained condition, using
+  // the conditions already seen in this list. 'chain' is updated in place.
+  private chainCondition(raw: string, chain: string[]): string {
+    const expr = raw.trim();
+
+    const ifMatch = expr.match(/^if\s+(.+)$/s);
+    if (ifMatch) {
+      chain.length = 0;
+      chain.push(ifMatch[1].trim());
+      return expr;
+    }
+
+    const elseIfMatch = expr.match(/^elseif\s+(.+)$/s);
+    if (elseIfMatch) {
+      const negations = chain.map(c => 'not(' + c + ')');
+      const own = elseIfMatch[1].trim();
+      chain.push(own);
+      return 'if and(' + negations.concat([own]).join(', ') + ')';
+    }
+
+    if (/^else$/.test(expr)) {
+      if (chain.length === 0) { return expr; }
+      const negations = chain.map(c => 'not(' + c + ')');
+      return negations.length === 1 ? 'if ' + negations[0] : 'if and(' + negations.join(', ') + ')';
+    }
+
+    return expr;
   }
 
   private resolveStageTemplate(item: any, dir: string, depth: number): StageNode[] {
@@ -385,14 +442,19 @@ export class PipelineParser {
       if (this.visited.has(key)) {
         return [this.unresolvedStage(ref + ' (circular)')];
       }
-      this.visited.add(key);
-      const inner = this.parseFileForStages(resolved, depth + 1);
-      this.visited.delete(key);
-
-      // Build effective params: template defaults + caller overrides
+      // Read the caller's parameters FIRST -- they are flattened against the
+      // ENCLOSING file's values, so this must happen before the context swap.
       const callerParams = this.extractParams(item);
       const rawCallerParams = this.extractRawParams(item);
       const effectiveParams = this.buildTemplateEffectiveParams(resolved, callerParams);
+
+      // Inside the child, conditional blocks refer to the CHILD's parameters.
+      const prevCtx = this.ctxParams;
+      this.ctxParams = effectiveParams;
+      this.visited.add(key);
+      const inner = this.parseFileForStages(resolved, depth + 1);
+      this.visited.delete(key);
+      this.ctxParams = prevCtx;
 
       for (const s of inner) {
         if (!s.templateRef) { s.templateRef = ref; }
@@ -744,25 +806,45 @@ export class PipelineParser {
     return result;
   }
 
+  // A caller's 'parameters:' block can itself be gated:
+  //   ${{ if eq(parameters.definitionSource, 'db') }}:
+  //     dependsOn: [ExtractFromProd]
+  //   ${{ else }}:
+  //     dependsOn: [ExtractDefinitionsFromRepository]
+  // Those keys are conditions, not parameter names. Keep the branch that wins
+  // under the enclosing file's values; when the condition cannot be decided,
+  // drop it so the template's own default applies (previous behaviour).
+  private flattenParamBlock(obj: any): Record<string, any> {
+    const out: Record<string, any> = {};
+    if (!obj || typeof obj !== 'object') { return out; }
+    const chain: string[] = [];
+    for (const [k, v] of Object.entries(obj)) {
+      const clean = k.replace(/__ado_dup_\d+$/, '').trim();
+      if (/^\$\{\{.*\}\}$/.test(clean)) {
+        const expr = this.chainCondition(this.extractCondition(k), chain);
+        if (this.tryEvalCondition(expr, this.ctxParams) === true) {
+          const branch = this.flattenParamBlock(v);
+          for (const [bk, bv] of Object.entries(branch)) { out[bk] = bv; }
+        }
+        continue;
+      }
+      out[k] = v;
+    }
+    return out;
+  }
+
   private extractParams(item: any): Record<string, string> {
     const result: Record<string, string> = {};
-    if (item.parameters && typeof item.parameters === 'object') {
-      for (const [k, v] of Object.entries(item.parameters)) {
-        result[k] = this.str(v);
-      }
+    const flat = this.flattenParamBlock(item.parameters);
+    for (const [k, v] of Object.entries(flat)) {
+      result[k] = this.str(v);
     }
     return result;
   }
 
   // Extract raw parameter values preserving arrays/objects (for dependsOn resolution)
   private extractRawParams(item: any): Record<string, any> {
-    const result: Record<string, any> = {};
-    if (item.parameters && typeof item.parameters === 'object') {
-      for (const [k, v] of Object.entries(item.parameters)) {
-        result[k] = v;
-      }
-    }
-    return result;
+    return this.flattenParamBlock(item.parameters);
   }
 
   // Merge template file's parameter defaults with caller-supplied overrides
@@ -924,6 +1006,21 @@ export class PipelineParser {
     return [];
   }
 
+  // An object-typed parameter value is stored JSON-stringified (see str()), so
+  // an array dependsOn arrives as '["A","B"]'. Pushing that as ONE dependency
+  // matched no node, and the stage rendered with no incoming edge at all.
+  private expandDepValue(val: any): string[] {
+    if (Array.isArray(val)) { return this.parseDependsOn(val); }
+    const text = this.str(val).trim();
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) { return this.parseDependsOn(parsed); }
+      } catch { /* not JSON after all -- treat as a plain name */ }
+    }
+    return text ? [text] : [];
+  }
+
   // Resolve dependsOn entries that are whole-expression parameter refs
   // (e.g. "${{ parameters.dependsOn }}") where the raw caller value is an array.
   // This properly expands array-typed dependsOn params passed to stage templates.
@@ -939,14 +1036,11 @@ export class PipelineParser {
       if (wholeMatch) {
         const paramName = wholeMatch[1];
         const rawVal = rawCallerParams[paramName];
-        if (Array.isArray(rawVal)) {
-          // Parse the raw array the same way we parse dependsOn from YAML
-          result.push(...this.parseDependsOn(rawVal));
-        } else if (rawVal !== undefined && rawVal !== null) {
-          // Scalar value -- just substitute
-          result.push(this.str(rawVal));
+        if (rawVal !== undefined && rawVal !== null) {
+          result.push(...this.expandDepValue(rawVal));
         } else if (paramName in effectiveParams) {
-          result.push(effectiveParams[paramName]);
+          // Falls back to the TEMPLATE's own default, which is JSON text.
+          result.push(...this.expandDepValue(effectiveParams[paramName]));
         } else {
           result.push(d); // Keep unresolved
         }
@@ -1110,6 +1204,13 @@ export class PipelineParser {
       if (results.some(r => r === true)) { return true; }
       if (results.some(r => r === null)) { return null; }
       return false;
+    }
+
+    // Handle not(...) wrapper -- produced for elseif/else branches
+    const notMatch = expr.match(/^if\s+not\((.+)\)$/s);
+    if (notMatch) {
+      const inner = this.tryEvalCondition('if ' + notMatch[1].trim(), params);
+      return inner === null ? null : !inner;
     }
 
     // Match: if eq(parameters.X, Y) or if ne(parameters.X, Y)

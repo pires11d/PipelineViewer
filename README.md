@@ -62,12 +62,17 @@ See every **variable group** referenced anywhere in the resolved template tree �
 
 ### Toolbar
 - **Expand All / Collapse All** — toggle all stages open or closed (also expands/collapses parameter and input toggles)
-- **Zoom In (+) / Zoom Out (-) / Reset** — scale the flowchart from 30% to 200%
+- **Zoom In (+) / Zoom Out (-) / Reset** — scale the flowchart from 15% to 200%
+- **Fit** — scale the whole diagram to the window. Runs automatically when a pipeline opens, after Expand / Collapse All, when the parameter picker changes which stages run, and on window resize — until you zoom by hand, after which it stays out of your way until you press it again. Never magnifies past 100%
 - **View Source** — jump straight to the YAML source file in the editor
 - **Called By** — find pipelines across the workspace that reference the current file
 - **Export As Image** — export the diagram as an image
 - **Theme** — switch between System, Dark, and Light (persisted per panel)
 - **Inspect row** — **Parameters**, **Variables**, and **Skipped** toggles, each color-lit when it has content and dimmed when empty; they start closed
+
+### Navigating a large diagram
+- **Drag the background** to pan; the middle mouse button pans from anywhere, including over a stage card
+- **Ctrl / Cmd + mouse wheel** zooms around the pointer, so the stage you are looking at stays put
 
 ---
 

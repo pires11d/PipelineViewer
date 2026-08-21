@@ -199,9 +199,13 @@ body[data-theme="light"] .skipped-hint,
 body[data-theme="light"] .inspector-label { opacity: 0.85; color: #55606a; }
 
 #canvas-wrapper { flex: 1; overflow: auto; position: relative; min-height: 0; }
+#canvas-wrapper.panning { cursor: grabbing; }
+#canvas-wrapper.panning #canvas { pointer-events: none; }
+/* Scale lives on the CSS 'zoom' property, not transform: it is layout-affecting,
+   so the wrapper's scrollbars match what is drawn. */
 #canvas {
   position: relative; padding: 40px;
-  transform-origin: 0 0; min-width: max-content; min-height: max-content;
+  min-width: max-content; min-height: max-content;
 }
 
 /* ===== Stage Nodes ===== */

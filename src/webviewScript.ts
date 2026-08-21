@@ -4,7 +4,13 @@ export function getScript(): string {
   try {
   var vscode = acquireVsCodeApi();
   var canvas = document.getElementById('canvas');
+  var wrapper = document.getElementById('canvas-wrapper');
   var zoom = 1;
+  // 0.15, not the old 0.3: a 16-stage graph needs ~0.25 to fit, and a floor
+  // above that made 'Fit' leave content off-screen -- the whole point of it.
+  var ZOOM_MIN = 0.15, ZOOM_MAX = 2;
+  // Stays true until the user zooms by hand; then auto-fit backs off for good.
+  var autoFit = true;
   var expandedStages = {};
 
   // Inspector buttons (Parameters / Variables / Skipped) light up when they
@@ -272,7 +278,7 @@ export function getScript(): string {
   }
 
   function stageTitle(s) {
-    var title = humanize(s.displayName || s.name || '(unnamed)');
+    var title = humanize(s.displayName || (s.syntheticName ? '' : s.name) || '(unnamed)');
     if (/^\\([^)]+\\)$/.test(title) || title === '(unnamed)') title = filenameFallback();
     return title;
   }
@@ -465,7 +471,12 @@ export function getScript(): string {
   function classifyAndBuild() {
     var skipped = [], seen = {};
     stages = [];
-    MODEL.stages.forEach(function(s) {
+    MODEL.stages.forEach(function(s, i) {
+      // A parameterised stage name resolves to '' when the template is opened
+      // on its own. Every name-keyed lookup (expand, layout, PNG export) then
+      // no-ops because '' is falsy, and two such stages dedup into one.
+      // Identity only -- stageTitle ignores it, so the card keeps its label.
+      if (!s.name) { s.syntheticName = true; s.name = '__stage_' + i; }
       // Reflect the current skip decision so getEffectiveDeps can collapse it
       s.skipped = computeSkip(s);
       if (s.skipped) { skipped.push(s); return; }
@@ -522,7 +533,7 @@ export function getScript(): string {
     }
 
     renderExcluded(skipped);
-    relayout();
+    relayout(true);
   }
 
   // -- Skipped stages panel (feature: "why is this stage not running?") --
@@ -1020,7 +1031,7 @@ export function getScript(): string {
     canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) { cf.classList.add('expanded'); });
     var hpGrid = document.querySelector('.header-params-grid');
     if (hpGrid) hpGrid.classList.remove('collapsed');
-    relayout();
+    relayout(true);
   }
 
   function collapseAll() {
@@ -1034,11 +1045,11 @@ export function getScript(): string {
     canvas.querySelectorAll('.step-flow-card.has-children').forEach(function(cf) { cf.classList.remove('expanded'); });
     var hpGrid = document.querySelector('.header-params-grid');
     if (hpGrid) hpGrid.classList.add('collapsed');
-    relayout();
+    relayout(true);
   }
 
   // -- Relayout: measure heights, reposition, redraw connectors --
-  function relayout() {
+  function relayout(fitAfter) {
     document.querySelectorAll('.stage-node').forEach(function(el) {
       var nm = el.getAttribute('data-stage');
       if (nm && nodePositions[nm]) {
@@ -1080,7 +1091,73 @@ export function getScript(): string {
         });
       }
       renderConnectors();
+      if (fitAfter && autoFit) fitToScreen();
     });
+  }
+
+  // -- Zoom, fit and pan ---------------------------------------------------
+  // Scale via the CSS 'zoom' property, NOT transform: scale(). A transform is
+  // visual only, so #canvas-wrapper kept the scroll extent of the UNSCALED box
+  // -- zooming out left dead space and zooming in clipped the right/bottom of
+  // the graph with no way to scroll to it. 'zoom' reflows, so scrollbars follow.
+  function applyZoom(z) {
+    zoom = Math.max(ZOOM_MIN, Math.min(z, ZOOM_MAX));
+    canvas.style.zoom = String(zoom);
+  }
+
+  // Unscaled size of the drawn content. Stage graphs come from nodePositions;
+  // steps/jobs templates render one flow container instead, hence the fallback
+  // (its rect is scaled, so divide it back out -- same trick relayout uses).
+  function contentSize() {
+    var w = 0, h = 0;
+    var names = Object.keys(nodePositions);
+    if (names.length) {
+      names.forEach(function(n) {
+        var pos = nodePositions[n];
+        w = Math.max(w, pos.x + pos.w + PAD * 2);
+        h = Math.max(h, pos.y + pos.h + PAD * 2);
+      });
+    } else {
+      var inner = canvas.querySelector('.direct-steps, .direct-jobs');
+      if (inner) {
+        var r = inner.getBoundingClientRect();
+        w = r.width / zoom + 40;
+        h = r.height / zoom + 40;
+      }
+    }
+    return { w: w, h: h };
+  }
+
+  function fitToScreen() {
+    if (!wrapper) return;
+    // A hidden or not-yet-laid-out panel reports ~0 and would fit to ZOOM_MIN.
+    if (wrapper.clientWidth < 50 || wrapper.clientHeight < 50) return;
+    var c = contentSize();
+    if (c.w <= 0 || c.h <= 0) return;
+    // Cap at 1: magnifying a two-stage pipeline to 200% just looks broken.
+    applyZoom(Math.min(wrapper.clientWidth / c.w, wrapper.clientHeight / c.h, 1));
+    wrapper.scrollLeft = 0;
+    wrapper.scrollTop = 0;
+    autoFit = true;
+  }
+
+  // Keep the point under the cursor still while the scale changes.
+  function zoomAt(z, clientX, clientY) {
+    if (!wrapper) { applyZoom(z); return; }
+    var r = wrapper.getBoundingClientRect();
+    var cx = clientX - r.left, cy = clientY - r.top;
+    var contentX = (wrapper.scrollLeft + cx) / zoom;
+    var contentY = (wrapper.scrollTop + cy) / zoom;
+    applyZoom(z);
+    wrapper.scrollLeft = contentX * zoom - cx;
+    wrapper.scrollTop = contentY * zoom - cy;
+  }
+
+  function zoomFromCentre(z) {
+    autoFit = false;
+    if (!wrapper) { applyZoom(z); return; }
+    var r = wrapper.getBoundingClientRect();
+    zoomAt(z, r.left + wrapper.clientWidth / 2, r.top + wrapper.clientHeight / 2);
   }
 
   // -- Orthogonal Connectors --
@@ -1151,16 +1228,65 @@ export function getScript(): string {
   document.getElementById('btnExpandAll').addEventListener('click', expandAll);
   document.getElementById('btnCollapseAll').addEventListener('click', collapseAll);
   document.getElementById('btnZoomIn').addEventListener('click', function() {
-    zoom = Math.min(zoom + 0.1, 2);
-    canvas.style.transform = 'scale(' + zoom + ')';
+    zoomFromCentre(zoom + 0.1);
   });
   document.getElementById('btnZoomOut').addEventListener('click', function() {
-    zoom = Math.max(zoom - 0.1, 0.3);
-    canvas.style.transform = 'scale(' + zoom + ')';
+    zoomFromCentre(zoom - 0.1);
   });
   document.getElementById('btnResetZoom').addEventListener('click', function() {
-    zoom = 1; canvas.style.transform = 'scale(1)';
+    autoFit = false;
+    applyZoom(1);
+    if (wrapper) { wrapper.scrollLeft = 0; wrapper.scrollTop = 0; }
   });
+  var btnFit = document.getElementById('btnFit');
+  if (btnFit) btnFit.addEventListener('click', fitToScreen);
+
+  // -- Drag the background to pan; ctrl/cmd + wheel to zoom at the cursor --
+  if (wrapper) {
+    var panning = false, panX = 0, panY = 0, panL = 0, panT = 0;
+    var CARDS = '.stage-node, .job-card, .step-flow-card, .direct-steps, .direct-jobs';
+
+    wrapper.addEventListener('mousedown', function(e) {
+      // Left button pans only on empty space, so card clicks still work.
+      // Middle button pans anywhere.
+      var onCard = e.target.closest ? e.target.closest(CARDS) : null;
+      if (e.button !== 1 && !(e.button === 0 && !onCard)) return;
+      panning = true;
+      panX = e.clientX; panY = e.clientY;
+      panL = wrapper.scrollLeft; panT = wrapper.scrollTop;
+      wrapper.classList.add('panning');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!panning) return;
+      wrapper.scrollLeft = panL - (e.clientX - panX);
+      wrapper.scrollTop = panT - (e.clientY - panY);
+    });
+
+    window.addEventListener('mouseup', function() {
+      if (!panning) return;
+      panning = false;
+      wrapper.classList.remove('panning');
+    });
+
+    // preventDefault also stops VS Code zooming the whole webview.
+    wrapper.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      autoFit = false;
+      zoomAt(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
+    }, { passive: false });
+
+    // Re-fit while still in auto mode -- also covers a panel that was hidden
+    // (and measured 0) when it first rendered.
+    var fitTimer = null;
+    window.addEventListener('resize', function() {
+      if (!autoFit) return;
+      if (fitTimer) clearTimeout(fitTimer);
+      fitTimer = setTimeout(fitToScreen, 120);
+    });
+  }
   document.getElementById('btnOpenSource').addEventListener('click', function() {
     vscode.postMessage({ command: 'openFile', path: MODEL.filePath });
   });

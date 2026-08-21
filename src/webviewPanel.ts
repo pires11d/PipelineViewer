@@ -214,6 +214,7 @@ export class PipelineViewerPanel {
     <button id="btnZoomIn" title="Zoom In">+</button>
     <button id="btnZoomOut" title="Zoom Out">-</button>
     <button id="btnResetZoom" title="Reset Zoom">Reset</button>
+    <button id="btnFit" title="Fit the whole diagram in the window (ctrl+wheel to zoom, drag the background to pan)">Fit</button>
     <button id="btnOpenSource" title="Open YAML source file">View Source</button>
     <button id="btnCalledBy" title="Find pipelines that reference this file">Called By</button>
     <button id="btnExportPng" title="Export the diagram as a PNG image">Export As Image</button>

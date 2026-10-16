@@ -107,6 +107,7 @@ export class PipelineParser {
   private manualMappings: Record<string, string>;
   private maxDepth: number;
   private repoMappings: Map<string, string> = new Map();
+  private probeMisses: Set<string> = new Set();
   private visited: Set<string> = new Set();
   private fileCache: Map<string, any> = new Map();
   private originalDeps: Map<string, string> = new Map();
@@ -902,6 +903,16 @@ export class PipelineParser {
         const full = path.join(mappedRoot, tplPath);
         if (fs.existsSync(full)) { return full; }
       }
+
+      // The local checkout of a template repo is rarely named after it (one
+      // library may be published as 'Dart.PipelineTemplates' in one collection
+      // and 'PipelineTemplates' in another), so fall back to the first
+      // workspace folder that actually contains the referenced file.
+      const probed = this.findRootContaining(tplPath);
+      if (probed) {
+        this.repoMappings.set(alias, probed);
+        return path.join(probed, tplPath);
+      }
       return null;
     }
 
@@ -956,6 +967,29 @@ export class PipelineParser {
       const result = this.searchDir(root, folderName, 0, 5, skipDirs);
       if (result) { return result; }
     }
+    return null;
+  }
+
+  // Breadth-first, so the shallowest match wins over stale copies buried deeper.
+  private findRootContaining(relPath: string): string | null {
+    if (this.probeMisses.has(relPath)) { return null; }
+    const skipDirs = new Set(['.git', 'node_modules', 'out', 'bin', 'obj', '.vs', 'packages']);
+    const maxDepth = 6;
+
+    let level = this.workspaceFolders.slice();
+    for (let depth = 0; depth <= maxDepth && level.length > 0; depth++) {
+      const next: string[] = [];
+      for (const dir of level) {
+        if (fs.existsSync(path.join(dir, relPath))) { return dir; }
+        try {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory() && !skipDirs.has(entry.name)) { next.push(path.join(dir, entry.name)); }
+          }
+        } catch { /* permission error, skip */ }
+      }
+      level = next;
+    }
+    this.probeMisses.add(relPath);
     return null;
   }
 

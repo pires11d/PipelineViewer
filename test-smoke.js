@@ -80,6 +80,34 @@ async function main() {
   assert(m4.stages.length > 1 && jobs4 > 0,
     '@templates resolved (' + m4.stages.length + ' stages, ' + jobs4 + ' jobs)');
 
+  // Test 5: a pipeline is a pipeline whatever its root shape (stages, jobs or
+  // steps) -- the Misc pipelines reference no templates and were badged as
+  // JOB/STEP TEMPLATE. Real templates must keep their template badge.
+  console.log('\n=== TEST 5: pipeline vs template classification ===');
+  const MISC = path.join(PIPELINES, '_Shared/Misc');
+  const TPL = path.join(PIPELINES, '_Shared/PipelineTemplates/templates');
+  [
+    [path.join(MISC, 'deploy-folder.yml'), 'pipeline', 'jobs'],
+    [path.join(MISC, 'code-sign.yml'), 'pipeline', 'steps'],
+    [path.join(MISC, 'push-pipeline-files.yml'), 'pipeline', 'stages'],
+    [path.join(TPL, 'stages/frontend/frontend-deploy-only-job.yml'), 'jobs', 'jobs'],
+    [path.join(TPL, 'steps/ssrs/ssrs-deploy-reports-step.yml'), 'steps', 'steps'],
+  ].forEach(([f, type, kind]) => {
+    if (!fs.existsSync(f)) { console.log('  skip: ' + f); return; }
+    const m = newParser().parse(f);
+    assert(m.templateType === type && m.rootKind === kind,
+      path.basename(f) + ' -> ' + m.templateType + '/' + m.rootKind + ' (want ' + type + '/' + kind + ')');
+  });
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? walk(path.join(d, e.name)) : (/\.ya?ml$/i.test(e.name) ? [path.join(d, e.name)] : []));
+  const miscWrong = walk(MISC).filter(f => newParser().parse(f).templateType !== 'pipeline');
+  assert(miscWrong.length === 0, 'every Misc file is a PIPELINE' +
+    (miscWrong.length ? ' (not: ' + miscWrong.map(f => path.basename(f)).join(', ') + ')' : ''));
+  const tplFiles = walk(TPL);
+  const tplWrong = tplFiles.filter(f => newParser().parse(f).templateType === 'pipeline');
+  assert(tplWrong.length === 0, 'no template of ' + tplFiles.length + ' is a PIPELINE' +
+    (tplWrong.length ? ' (are: ' + tplWrong.map(f => path.relative(TPL, f)).join(', ') + ')' : ''));
+
   console.log('\n=== SMOKE TEST ' + (process.exitCode ? 'FAILED' : 'PASSED') + ' ===\n');
 }
 

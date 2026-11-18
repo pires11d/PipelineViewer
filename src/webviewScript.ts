@@ -77,7 +77,10 @@ export function getScript(): string {
     metaItems = '<span><span class="label">Trigger:</span> ' + esc(MODEL.trigger) + '</span>'
       + '<span><span class="label">PR:</span> ' + esc(MODEL.pr) + '</span>'
       + '<span><span class="label">Pool:</span> ' + esc(MODEL.pool) + '</span>'
-      + '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>';
+      + (MODEL.rootKind === 'jobs' || MODEL.rootKind === 'steps'
+        ? '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
+          + '<span><span class="label">Steps:</span> ' + totalSteps + '</span>'
+        : '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>');
   } else if (MODEL.templateType === 'pipelineTemplate' || MODEL.templateType === 'stages') {
     metaItems = '<span><span class="label">Stages:</span> ' + MODEL.stages.length + '</span>'
       + '<span><span class="label">Jobs:</span> ' + totalJobs + '</span>'
@@ -490,10 +493,10 @@ export function getScript(): string {
     nodePositions = {};
     canvas.innerHTML = '';
 
-    var directSteps = (MODEL.templateType === 'steps' && stages.length === 1
+    var directSteps = (MODEL.rootKind === 'steps' && stages.length === 1
       && stages[0].jobs && stages[0].jobs.length === 1
       && stages[0].jobs[0].steps);
-    var directJobs = (MODEL.templateType === 'jobs' && stages.length === 1
+    var directJobs = (MODEL.rootKind === 'jobs' && stages.length === 1
       && stages[0].jobs && stages[0].jobs.length > 0);
 
     if (directSteps) {

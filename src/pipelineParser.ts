@@ -17,6 +17,9 @@ export interface PipelineModel {
   stages: StageNode[];
   callerParams: Record<string, any>;
   templateType: 'pipeline' | 'pipelineTemplate' | 'stages' | 'jobs' | 'steps';
+  // Root shape of the file, separate from templateType: a standalone pipeline
+  // may start at stages, jobs or steps. Drives the layout, not the badge.
+  rootKind: 'stages' | 'jobs' | 'steps';
   // User-adjustable run parameters (this pipeline's own declared parameters),
   // used to drive the interactive parameter picker in the webview.
   controls: ParamControl[];
@@ -168,6 +171,7 @@ export class PipelineParser {
       stages: [],
       callerParams: {},
       templateType: 'pipeline',
+      rootKind: 'stages',
       controls: [],
       paramValues: {},
       variableGroups: [],
@@ -220,24 +224,23 @@ export class PipelineParser {
         }
       }
       const parsedStages = this.parseStages(doc.stages, dir, 0);
-      // Determine if this is a standalone pipeline or a template:
-      // Standalone pipelines have trigger/pr/pool at root level (even if set to 'none').
-      const hasRootPipelineFields = ('trigger' in doc) || ('pr' in doc) || ('pool' in doc);
-      if (hasRootPipelineFields) {
+      if (this.isStandalonePipeline(doc)) {
         model.templateType = 'pipeline';
       } else {
         model.templateType = parsedStages.length > 1 ? 'pipelineTemplate' : 'stages';
       }
       model.stages = parsedStages;
     } else if (doc.jobs) {
-      model.templateType = 'jobs';
+      model.templateType = this.isStandalonePipeline(doc) ? 'pipeline' : 'jobs';
+      model.rootKind = 'jobs';
       model.stages = [{
         ...this.emptyStage('DefaultStage'),
         displayName: 'Default Stage',
         jobs: this.parseJobs(doc.jobs, dir, 0),
       }];
     } else if (doc.steps) {
-      model.templateType = 'steps';
+      model.templateType = this.isStandalonePipeline(doc) ? 'pipeline' : 'steps';
+      model.rootKind = 'steps';
       model.stages = [{
         ...this.emptyStage('DefaultStage'),
         displayName: 'Default Stage',
@@ -1430,6 +1433,13 @@ export class PipelineParser {
       }
     }
     return result;
+  }
+
+  // A template file cannot declare these root keys, so any one of them (even
+  // set to 'none') marks a standalone pipeline, whatever its root shape.
+  private isStandalonePipeline(doc: any): boolean {
+    return ['trigger', 'pr', 'pool', 'name', 'schedules', 'lockBehavior', 'appendCommitMessageToRunName']
+      .some(k => k in doc);
   }
 
   private describeTrigger(val: any): string {
